@@ -100,6 +100,7 @@ pub enum DashEvent<'a> {
 impl Hub {
     pub fn new(cfg: Config, db: Arc<Db>, recorder: Recorder, master: KeyBytes) -> Result<Arc<Self>> {
         let open = db.open_exams()?;
+        let learned: HashMap<String, String> = db.subnet_labs()?.into_iter().collect();
         let hub = Arc::new(Self {
             cfg,
             db,
@@ -108,7 +109,7 @@ impl Hub {
             pcs: RwLock::new(HashMap::new()),
             dashes: RwLock::new(HashMap::new()),
             open_exams: RwLock::new(open),
-            subnet_labs: RwLock::new(db.subnet_labs()?.into_iter().collect()),
+            subnet_labs: RwLock::new(learned),
             next_id: AtomicU64::new(1),
         });
         // Known PCs appear as Offline tiles from the start, so a PC that never
