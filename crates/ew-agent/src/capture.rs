@@ -172,7 +172,7 @@ pub fn run(shared: Arc<Shared>, net: ClientHandle) {
 
 fn session(shared: &Shared, net: &ClientHandle, prefer_hw: bool) -> Result<()> {
     let gpu = capture::open_primary().context("open GPU")?;
-    let mut monitors = gpu.monitors;
+    let monitors = gpu.monitors;
     if monitors > 1 {
         net.send(AgentMsg::Event { kind: "alert_monitors".into(), detail: format!("{monitors} monitors connected") });
     }
@@ -250,7 +250,6 @@ fn session(shared: &Shared, net: &ClientHandle, prefer_hw: bool) -> Result<()> {
                 let g = capture::open_primary()?;
                 if g.monitors != monitors {
                     net.send(AgentMsg::Event { kind: "alert_monitors".into(), detail: format!("Monitor count changed: {monitors} → {}", g.monitors) });
-                    monitors = g.monitors;
                 }
                 drop(g);
                 return Ok(()); // rebuild everything on the next session() call

@@ -37,6 +37,8 @@ pub struct AppState {
     sessions: Mutex<HashMap<String, Session>>,
     fails: Mutex<HashMap<IpAddr, (u32, Instant)>>,
     secure_cookie: bool,
+    /// Certificate pin handed to student PCs in the student-installer ZIP.
+    pin: String,
 }
 
 #[derive(Clone)]
@@ -46,12 +48,13 @@ struct Session {
     expires: Instant,
 }
 
-pub fn router(hub: Arc<Hub>, secure_cookie: bool) -> Router {
+pub fn router(hub: Arc<Hub>, secure_cookie: bool, pin: String) -> Router {
     let state = Arc::new(AppState {
         hub,
         sessions: Mutex::new(HashMap::new()),
         fails: Mutex::new(HashMap::new()),
         secure_cookie,
+        pin,
     });
     Router::new()
         .route("/", get(index))
@@ -60,6 +63,8 @@ pub fn router(hub: Arc<Hub>, secure_cookie: bool) -> Router {
         .route("/api/login", post(login))
         .route("/api/logout", post(logout))
         .route("/api/me", get(me))
+        .route("/api/setup", get(setup_status).post(setup_create))
+        .route("/api/student-installer", get(student_installer))
         .route("/api/exams", post(open_exam))
         .route("/api/exams/history", get(exam_history))
         .route("/api/exams/:id/close", post(close_exam))
@@ -200,11 +205,15 @@ async fn login(State(st): State<Arc<AppState>>, ConnectInfo(addr): ConnectInfo<S
         return err(StatusCode::UNAUTHORIZED, "Wrong username or password");
     };
     st.fails.lock().remove(&ip);
+    st.hub.db.audit(&user, "login", &ip.to_string());
+    start_session(&st, user, admin)
+}
+
+fn start_session(st: &AppState, user: String, admin: bool) -> Response {
     let mut raw = [0u8; 32];
     rand::thread_rng().fill_bytes(&mut raw);
     let token = hex::encode(raw);
     st.sessions.lock().insert(token.clone(), Session { user: user.clone(), admin, expires: Instant::now() + SESSION_TTL });
-    st.hub.db.audit(&user, "login", &ip.to_string());
     let cookie = format!(
         "{COOKIE}={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age={}{}",
         SESSION_TTL.as_secs(),
@@ -335,6 +344,118 @@ async fn audit(State(st): State<Arc<AppState>>, _t: Teacher) -> Response {
     match st.hub.db.audit_recent(200) {
         Ok(v) => ok_json(json!({"entries": v})),
         Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+    }
+}
+
+// ------------------------------------------------------- first-run setup
+
+async fn setup_status(State(st): State<Arc<AppState>>) -> Response {
+    ok_json(json!({"needs_setup": st.hub.db.teacher_count().unwrap_or(0) == 0}))
+}
+
+/// Creates the first admin account. Only while no account exists, and only
+/// from the server PC itself (the teacher installer opens the dashboard there).
+async fn setup_create(State(st): State<Arc<AppState>>, ConnectInfo(addr): ConnectInfo<SocketAddr>, headers: HeaderMap, Json(req): Json<LoginReq>) -> Response {
+    if headers.get("x-ew").map(|v| v.as_bytes()) != Some(b"1") {
+        return err(StatusCode::FORBIDDEN, "Missing request header");
+    }
+    if !addr.ip().is_loopback() {
+        return err(StatusCode::FORBIDDEN, "Create the first account on the ExamWatch server PC itself.");
+    }
+    if st.hub.db.teacher_count().unwrap_or(1) != 0 {
+        return err(StatusCode::CONFLICT, "Setup is already done. Please sign in.");
+    }
+    let user = req.username.trim().to_string();
+    if user.len() < 3 || user.len() > 40 || !user.chars().all(|c| c.is_ascii_alphanumeric() || "._-".contains(c)) {
+        return err(StatusCode::BAD_REQUEST, "Username: 3–40 letters, digits, dot, dash or underscore.");
+    }
+    if req.password.chars().count() < 10 {
+        return err(StatusCode::BAD_REQUEST, "Password must be at least 10 characters.");
+    }
+    let pw = req.password.clone();
+    let hash = match tokio::task::spawn_blocking(move || hash_password(&pw)).await {
+        Ok(Ok(h)) => h,
+        _ => return err(StatusCode::INTERNAL_SERVER_ERROR, "Could not store the password"),
+    };
+    if let Err(e) = st.hub.db.upsert_teacher(&user, &hash, true) {
+        return err(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string());
+    }
+    st.hub.db.audit(&user, "setup_admin", &addr.ip().to_string());
+    start_session(&st, user, true)
+}
+
+// ------------------------------------------------------- student installer
+
+/// Address student PCs should use: the host name the teacher used to reach this
+/// dashboard (reachable from the school network), unless that is localhost, in
+/// which case this machine's primary IPv4 address.
+fn server_host(headers: &HeaderMap) -> String {
+    let host = headers
+        .get(header::HOST)
+        .and_then(|v| v.to_str().ok())
+        .map(|h| h.rsplit_once(':').map_or(h, |(a, _)| a).trim_matches(['[', ']']).to_string())
+        .unwrap_or_default();
+    let local = host.is_empty() || host.eq_ignore_ascii_case("localhost") || host.parse::<IpAddr>().map_or(false, |ip| ip.is_loopback());
+    if !local {
+        return host;
+    }
+    // Routing-table lookup: connect() on UDP sends no packet.
+    std::net::UdpSocket::bind("0.0.0.0:0")
+        .and_then(|s| s.connect("192.0.2.1:9").map(|_| s))
+        .and_then(|s| s.local_addr())
+        .map(|a| a.ip().to_string())
+        .unwrap_or_else(|_| std::env::var("COMPUTERNAME").unwrap_or_default())
+}
+
+pub fn student_cfg(host: &str, port: u16, pin: &str, token: &str) -> String {
+    serde_json::to_string_pretty(&json!({
+        "server": format!("{host}:{port}"),
+        "pin": pin,
+        "token": token,
+    }))
+    .unwrap()
+}
+
+const STUDENT_README: &str = "ExamWatch student installer\r\n\r\n\
+1. Extract BOTH files into the same folder (USB stick or network share).\r\n\
+2. On each student PC, double-click ExamWatch-Student.msi: Next, Install, Finish.\r\n   \
+Or assign the MSI from that share with Group Policy.\r\n\
+3. The PC appears in the teacher dashboard by itself.\r\n\r\n\
+Keep these files private: examwatch-student.cfg lets a PC join this ExamWatch server.\r\n";
+
+async fn student_installer(State(st): State<Arc<AppState>>, t: Teacher, headers: HeaderMap) -> Response {
+    let msi = std::env::current_exe().ok().and_then(|p| p.parent().map(|d| d.join("student").join("ExamWatch-Student.msi")));
+    let Some(msi) = msi.filter(|p| p.exists()) else {
+        return err(StatusCode::NOT_FOUND, "The student installer is not on this server. Reinstall ExamWatch Teacher Setup.");
+    };
+    let cfg = student_cfg(&server_host(&headers), st.hub.cfg.agent_listen.port(), &st.pin, &st.hub.cfg.enroll_token);
+    let res = tokio::task::spawn_blocking(move || -> anyhow::Result<Vec<u8>> {
+        use std::io::Write;
+        let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        let opts = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+        zip.start_file("ExamWatch-Student.msi", opts)?;
+        zip.write_all(&std::fs::read(&msi)?)?;
+        zip.start_file("examwatch-student.cfg", opts)?;
+        zip.write_all(cfg.as_bytes())?;
+        zip.start_file("READ ME FIRST.txt", opts)?;
+        zip.write_all(STUDENT_README.as_bytes())?;
+        Ok(zip.finish()?.into_inner())
+    })
+    .await;
+    match res {
+        Ok(Ok(body)) => {
+            st.hub.db.audit(&t.user, "download_student_installer", "");
+            (
+                [
+                    (header::CONTENT_TYPE, "application/zip"),
+                    (header::CONTENT_DISPOSITION, "attachment; filename=\"ExamWatch-Student.zip\""),
+                    (header::CACHE_CONTROL, "no-store"),
+                ],
+                body,
+            )
+                .into_response()
+        }
+        _ => err(StatusCode::INTERNAL_SERVER_ERROR, "Could not build the installer package"),
     }
 }
 

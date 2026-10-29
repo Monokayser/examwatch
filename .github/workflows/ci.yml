@@ -44,6 +44,10 @@ jobs:
       - name: Release build
         run: cargo build --workspace --release
 
+      - name: End-to-end test (server + 10 simulated PCs + teacher API)
+        shell: pwsh
+        run: ./tools/e2e.ps1 -Bin target/release -PcsPerLab 5 -Seconds 60
+
       - name: Collect binaries
         shell: pwsh
         run: |

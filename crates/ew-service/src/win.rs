@@ -46,6 +46,8 @@ pub fn main() -> Result<()> {
     match cmd.as_str() {
         "install" => install(),
         "uninstall" => uninstall(),
+        // Run by the student MSI: copies examwatch-student.cfg into HKLM.
+        "import-config" => import_config(std::path::Path::new(&std::env::args().nth(2).context("usage: import-config <file>")?)),
         // Foreground mode for testing from an elevated console.
         "console" => {
             let (_tx, rx) = mpsc::channel();
@@ -80,6 +82,43 @@ fn log(msg: &str) {
 }
 
 // ------------------------------------------------------------- installation
+
+/// Parses `examwatch-student.cfg` (JSON: server, pin, token) and stores it in
+/// `HKLM\SOFTWARE\ExamWatch`, where the agent reads it.
+pub fn parse_cfg(text: &str) -> Result<(String, String, String)> {
+    let v: serde_json::Value = serde_json::from_str(text.trim_start_matches('\u{feff}')).context("examwatch-student.cfg is not valid")?;
+    let get = |k: &str| v.get(k).and_then(|x| x.as_str()).map(str::trim).filter(|s| !s.is_empty()).map(String::from);
+    let server = get("server").context("server missing")?;
+    let pin = get("pin").context("pin missing")?;
+    let token = get("token").context("token missing")?;
+    anyhow::ensure!(server.contains(':'), "server must be host:port");
+    anyhow::ensure!(pin.len() == 64 && pin.chars().all(|c| c.is_ascii_hexdigit()), "pin must be a SHA-256 fingerprint");
+    anyhow::ensure!(token.len() >= 16, "token too short");
+    Ok((server, pin, token))
+}
+
+fn import_config(path: &std::path::Path) -> Result<()> {
+    use windows::Win32::System::Registry::{
+        RegCloseKey, RegCreateKeyExW, RegSetValueExW, HKEY, HKEY_LOCAL_MACHINE, KEY_WRITE, REG_OPTION_NON_VOLATILE, REG_SZ,
+    };
+    let text = std::fs::read_to_string(path).with_context(|| format!("cannot read {}", path.display()))?;
+    let (server, pin, token) = parse_cfg(&text)?;
+    unsafe {
+        let mut key = HKEY::default();
+        RegCreateKeyExW(HKEY_LOCAL_MACHINE, w!("SOFTWARE\\ExamWatch"), 0, None, REG_OPTION_NON_VOLATILE, KEY_WRITE, None, &mut key, None)
+            .ok()
+            .context("cannot create HKLM\\SOFTWARE\\ExamWatch (run as administrator)")?;
+        for (name, value) in [("Server", &server), ("ServerPin", &pin), ("EnrollToken", &token)] {
+            let wide: Vec<u16> = value.encode_utf16().chain(Some(0)).collect();
+            let bytes = std::slice::from_raw_parts(wide.as_ptr() as *const u8, wide.len() * 2);
+            let wname: Vec<u16> = name.encode_utf16().chain(Some(0)).collect();
+            RegSetValueExW(key, PCWSTR(wname.as_ptr()), 0, REG_SZ, Some(bytes)).ok().with_context(|| format!("cannot write {name}"))?;
+        }
+        let _ = RegCloseKey(key);
+    }
+    log(&format!("settings imported from {} (server {server})", path.display()));
+    Ok(())
+}
 
 fn install() -> Result<()> {
     let mgr = ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT | ServiceManagerAccess::CREATE_SERVICE)?;

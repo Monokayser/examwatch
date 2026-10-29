@@ -25,3 +25,16 @@ fn main() -> anyhow::Result<()> {
 fn main() {
     eprintln!("ew-service only runs on Windows");
 }
+
+#[cfg(all(test, windows))]
+mod tests {
+    #[test]
+    fn student_cfg_parsing() {
+        let pin = "a".repeat(64);
+        let ok = format!("{{\"server\": \"10.0.0.5:4433\", \"pin\": \"{pin}\", \"token\": \"0123456789abcdef0123\"}}");
+        assert_eq!(crate::win::parse_cfg(&ok).unwrap().0, "10.0.0.5:4433");
+        assert!(crate::win::parse_cfg("{}").is_err());
+        assert!(crate::win::parse_cfg(&ok.replace(&pin, "short")).is_err());
+        assert!(crate::win::parse_cfg(&ok.replace("10.0.0.5:4433", "10.0.0.5")).is_err());
+    }
+}

@@ -43,14 +43,34 @@ fn main() -> Result<()> {
     let cmd = args.first().map(String::as_str).unwrap_or("run");
 
     match cmd {
+        // Used by the teacher installer: idempotent, no prompts. Writes a config
+        // with a random enrolment token and an absolute data folder, creates the
+        // certificate, and leaves lab subnets to be learned from the dashboard.
         "init" => {
             if cfg_path.exists() {
                 println!("{} already exists", cfg_path.display());
             } else {
+                let data_dir = match args.iter().position(|a| a == "--data-dir") {
+                    Some(i) => args.get(i + 1).map(PathBuf::from).context("--data-dir needs a path")?,
+                    None => PathBuf::from("data"),
+                };
                 let token = hex::encode(crypto::random_key());
-                std::fs::write(&cfg_path, config::EXAMPLE.replace("CHANGE-ME-to-a-long-random-string", &token))?;
-                println!("wrote {} (edit the lab subnets before first use)", cfg_path.display());
+                let text: String = config::EXAMPLE
+                    .replace("CHANGE-ME-to-a-long-random-string", &token)
+                    .replace("data_dir     = \"data\"", &format!("data_dir     = {:?}", data_dir.to_string_lossy().replace('\\', "/")))
+                    .lines()
+                    .filter(|l| !l.trim_start().starts_with("subnets"))
+                    .map(|l| format!("{l}\n"))
+                    .collect();
+                if let Some(dir) = cfg_path.parent().filter(|d| !d.as_os_str().is_empty()) {
+                    std::fs::create_dir_all(dir)?;
+                }
+                std::fs::write(&cfg_path, text)?;
+                println!("wrote {}", cfg_path.display());
             }
+            let cfg = Config::load(&cfg_path)?;
+            let (cert, _) = load_or_create_cert(&cfg)?;
+            std::fs::write(cfg.data_dir.join("server.fingerprint.txt"), ew_proto::tls::fingerprint(cert.as_ref()))?;
             Ok(())
         }
         "add-teacher" => {
@@ -118,7 +138,7 @@ async fn run(cfg: Config) -> Result<()> {
     tokio::spawn(ingest::run(hub.clone(), ep));
     tokio::spawn(retention::run(db.clone(), rec_root, cfg.retention_hours));
 
-    let app = http::router(hub.clone(), cfg.http_tls).into_make_service_with_connect_info::<std::net::SocketAddr>();
+    let app = http::router(hub.clone(), cfg.http_tls, pin.clone()).into_make_service_with_connect_info::<std::net::SocketAddr>();
     tracing::info!("dashboard on {}://{}", if cfg.http_tls { "https" } else { "http" }, cfg.http_listen);
     if cfg.http_tls {
         let mut tls = rustls::ServerConfig::builder_with_provider(ew_proto::tls::provider())

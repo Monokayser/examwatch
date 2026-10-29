@@ -19,7 +19,8 @@ use windows::core::{w, HSTRING, PCWSTR};
 use windows::Win32::Foundation::{COLORREF, HINSTANCE, HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::*;
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
-use windows::Win32::UI::HiDpi::GetDpiForWindow;
+use windows::Win32::UI::Controls::EM_SETLIMITTEXT;
+use windows::Win32::UI::HiDpi::{AdjustWindowRectExForDpi, GetDpiForWindow};
 use windows::Win32::UI::Input::KeyboardAndMouse::{EnableWindow, SetFocus};
 use windows::Win32::UI::WindowsAndMessaging::*;
 
@@ -98,9 +99,9 @@ pub fn run(shared: Arc<Shared>, net: ClientHandle, show_v1: bool) -> Result<()> 
         let cursor = LoadCursorW(None, IDC_ARROW)?;
         let white = HBRUSH(GetStockObject(WHITE_BRUSH).0);
         for (class, proc_) in [
-            (MAIN_CLASS, main_proc as WNDPROC),
-            (V1_CLASS, v1_proc as WNDPROC),
-            (NOTICE_CLASS, notice_proc as WNDPROC),
+            (MAIN_CLASS, Some(main_proc) as WNDPROC),
+            (V1_CLASS, Some(v1_proc) as WNDPROC),
+            (NOTICE_CLASS, Some(notice_proc) as WNDPROC),
         ] {
             RegisterClassExW(&WNDCLASSEXW {
                 cbSize: std::mem::size_of::<WNDCLASSEXW>() as u32,
