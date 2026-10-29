@@ -60,12 +60,14 @@ jobs:
           Copy-Item LICENSE, NOTICE, README.md, PRIVACY.md dist/
 
       - name: Install WiX Toolset 5
+        shell: pwsh
         run: |
           dotnet tool install --global wix --version 5.0.2
-          wix extension add -g WixToolset.UI.wixext/5.0.2
-          wix extension add -g WixToolset.Firewall.wixext/5.0.2
-          wix extension add -g WixToolset.Bal.wixext/5.0.2
-          wix extension add -g WixToolset.Util.wixext/5.0.2
+          foreach ($e in 'WixToolset.UI.wixext', 'WixToolset.Firewall.wixext', 'WixToolset.BootstrapperApplications.wixext', 'WixToolset.Util.wixext') {
+            wix extension add -g "$e/5.0.2"
+            if ($LASTEXITCODE) { throw "wix extension add $e failed" }
+          }
+          wix extension list -g
 
       - name: Build installers
         shell: pwsh
@@ -80,11 +82,11 @@ jobs:
           }
           New-Item -ItemType Directory -Force dist | Out-Null
           Build installer/Student.wxs dist/ExamWatch-Student.msi @('WixToolset.UI.wixext', 'WixToolset.Util.wixext') @()
-          Build installer/StudentSetup.wxs dist/ExamWatch-Student-Setup.exe @('WixToolset.Bal.wixext', 'WixToolset.Util.wixext') `
+          Build installer/StudentSetup.wxs dist/ExamWatch-Student-Setup.exe @('WixToolset.BootstrapperApplications.wixext', 'WixToolset.Util.wixext') `
             @('-d', "StudentMsi=$((Resolve-Path dist/ExamWatch-Student.msi).Path)")
           Build installer/Teacher.wxs dist/ExamWatch-Teacher.msi @('WixToolset.UI.wixext', 'WixToolset.Firewall.wixext', 'WixToolset.Util.wixext') `
             @('-d', "StudentMsi=$((Resolve-Path dist/ExamWatch-Student.msi).Path)", '-d', "StudentExe=$((Resolve-Path dist/ExamWatch-Student-Setup.exe).Path)")
-          Build installer/TeacherSetup.wxs dist/ExamWatch-Teacher-Setup.exe @('WixToolset.Bal.wixext', 'WixToolset.Util.wixext') `
+          Build installer/TeacherSetup.wxs dist/ExamWatch-Teacher-Setup.exe @('WixToolset.BootstrapperApplications.wixext', 'WixToolset.Util.wixext') `
             @('-d', "TeacherMsi=$((Resolve-Path dist/ExamWatch-Teacher.msi).Path)")
           Remove-Item dist/*.wixpdb -ErrorAction SilentlyContinue
           Get-ChildItem dist | Format-Table Name, Length
