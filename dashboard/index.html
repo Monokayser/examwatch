@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ExamWatch</title>
+  <link rel="stylesheet" href="/app.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <!-- Sign in -->
+  <main id="login" class="login" hidden>
+    <form id="login-form" class="login-card" autocomplete="on">
+      <div class="brand brand-lg"><span class="ico" data-i="shield"></span><span>ExamWatch</span></div>
+      <p class="muted">Teacher sign-in</p>
+      <label class="field"><span>Username</span><input id="login-user" name="username" autocomplete="username" required></label>
+      <label class="field"><span>Password</span><input id="login-pass" name="password" type="password" autocomplete="current-password" required></label>
+      <p id="login-error" class="form-error" role="alert"></p>
+      <button class="btn btn-primary btn-block" id="login-btn" type="submit">Sign in</button>
+    </form>
+  </main>
+
+  <!-- App -->
+  <div id="app" class="app" hidden>
+    <header class="topbar">
+      <div class="brand"><span class="ico" data-i="shield"></span><span>ExamWatch</span></div>
+      <nav id="lab-tabs" class="tabs" role="tablist" aria-label="Labs"></nav>
+      <div class="topbar-right">
+        <button class="btn btn-ghost" id="nav-recordings" type="button"><span class="ico" data-i="film"></span><span>Recordings</span></button>
+        <button class="btn btn-ghost btn-icon" id="logout" type="button" title="Sign out" aria-label="Sign out"><span class="ico" data-i="logout"></span></button>
+      </div>
+    </header>
+
+    <div id="conn-banner" class="banner" hidden><span class="ico" data-i="wifioff"></span><span>Connection to the server lost. Reconnecting…</span></div>
+
+    <!-- Live monitoring -->
+    <section id="live-view" class="view">
+      <div class="toolbar">
+        <div id="exam-strip" class="exam-strip"></div>
+        <div class="toolbar-right">
+          <div class="counts" id="counts"></div>
+          <label class="search"><span class="ico" data-i="search"></span><input id="search" type="search" placeholder="Student ID or PC" aria-label="Filter screens"></label>
+          <div class="seg" role="group" aria-label="Layout" id="layout-seg">
+            <button type="button" data-layout="stacked" title="Labs stacked"><span class="ico" data-i="grid"></span></button>
+            <button type="button" data-layout="columns" title="Labs side by side"><span class="ico" data-i="columns"></span></button>
+          </div>
+          <div class="seg" role="group" aria-label="Tile size" id="size-seg">
+            <button type="button" data-size="s">S</button>
+            <button type="button" data-size="m">M</button>
+            <button type="button" data-size="l">L</button>
+          </div>
+          <button class="btn btn-primary" id="open-exam-btn" type="button"><span class="ico" data-i="plus"></span><span>Open exam</span></button>
+        </div>
+      </div>
+      <div id="grid-root" class="grid-root"></div>
+      <p id="empty" class="empty" hidden></p>
+    </section>
+
+    <!-- Recordings -->
+    <section id="rec-view" class="view" hidden>
+      <div class="toolbar">
+        <button class="btn btn-ghost" id="rec-back" type="button"><span class="ico" data-i="back"></span><span>Back to live</span></button>
+        <p class="muted" id="rec-retention"></p>
+      </div>
+      <div class="rec-layout">
+        <aside class="panel"><h2 class="panel-title">Exams</h2><ul id="rec-exams" class="list"></ul></aside>
+        <div class="panel panel-grow"><h2 class="panel-title" id="rec-title">Select an exam</h2><div id="rec-students"></div></div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Enlarged screen -->
+  <dialog id="zoom" class="zoom" aria-label="Enlarged screen">
+    <div class="zoom-head">
+      <div class="zoom-title">
+        <span class="dot" id="zoom-dot"></span>
+        <strong id="zoom-student"></strong>
+        <span class="muted" id="zoom-meta"></span>
+      </div>
+      <div class="zoom-actions">
+        <span class="chip" id="zoom-quality">Thumbnail</span>
+        <button class="btn btn-ghost" id="zoom-reset" type="button"><span class="ico" data-i="reset"></span><span>Reset PC</span></button>
+        <button class="btn btn-ghost btn-icon" id="zoom-close" type="button" aria-label="Close"><span class="ico" data-i="x"></span></button>
+      </div>
+    </div>
+    <div class="zoom-stage"><canvas id="zoom-canvas"></canvas><div class="zoom-state" id="zoom-state"></div></div>
+  </dialog>
+
+  <!-- Open exam -->
+  <dialog id="exam-dlg" class="dlg" aria-labelledby="exam-dlg-title">
+    <form id="exam-form" method="dialog">
+      <h2 id="exam-dlg-title">Open exam</h2>
+      <label class="field"><span>Exam name</span><input id="exam-name" maxlength="120" required placeholder="e.g. CSE 312 Midterm"></label>
+      <fieldset class="field"><legend>Labs</legend><div id="exam-labs" class="checks"></div></fieldset>
+      <label class="field">
+        <span>Student roster <em class="muted">(optional, one ID per line or CSV)</em></span>
+        <textarea id="exam-roster" rows="5" placeholder="221-15-4021&#10;221-15-4022"></textarea>
+      </label>
+      <div class="roster-row">
+        <label class="btn btn-ghost file-btn"><span class="ico" data-i="upload"></span><span>Load CSV</span><input id="exam-file" type="file" accept=".csv,.txt" hidden></label>
+        <span class="muted" id="roster-count">No roster: any well-formed ID is accepted, duplicates are still blocked.</span>
+      </div>
+      <p class="form-error" id="exam-error" role="alert"></p>
+      <div class="dlg-actions">
+        <button class="btn btn-ghost" type="button" data-close>Cancel</button>
+        <button class="btn btn-primary" id="exam-submit" type="submit">Open exam</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Confirm -->
+  <dialog id="confirm-dlg" class="dlg dlg-sm">
+    <form method="dialog">
+      <h2 id="confirm-title"></h2>
+      <p id="confirm-body" class="muted"></p>
+      <div class="dlg-actions">
+        <button class="btn btn-ghost" value="no" type="submit">Cancel</button>
+        <button class="btn btn-danger" value="yes" id="confirm-yes" type="submit"></button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Player -->
+  <dialog id="player" class="zoom" aria-label="Recording player">
+    <div class="zoom-head">
+      <div class="zoom-title"><strong id="pl-title"></strong><span class="muted" id="pl-meta"></span></div>
+      <div class="zoom-actions"><button class="btn btn-ghost btn-icon" id="pl-close" type="button" aria-label="Close"><span class="ico" data-i="x"></span></button></div>
+    </div>
+    <div class="zoom-stage"><canvas id="pl-canvas"></canvas><div class="zoom-state" id="pl-state"></div></div>
+    <div class="pl-controls">
+      <button class="btn btn-ghost btn-icon" id="pl-play" type="button" aria-label="Play"><span class="ico" data-i="play"></span></button>
+      <span class="pl-time" id="pl-time">--:--:--</span>
+      <div class="pl-track" id="pl-track" role="slider" aria-label="Position" tabindex="0"><div class="pl-segs" id="pl-segs"></div><div class="pl-head" id="pl-head"></div></div>
+      <span class="pl-time muted" id="pl-end">--:--:--</span>
+      <div class="seg" id="pl-speed" role="group" aria-label="Speed">
+        <button type="button" data-speed="1">1×</button><button type="button" data-speed="4">4×</button><button type="button" data-speed="16">16×</button>
+      </div>
+    </div>
+  </dialog>
+
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+</body>
+</html>

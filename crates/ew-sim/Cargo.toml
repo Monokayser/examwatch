@@ -1,0 +1,13 @@
+[package]
+name = "ew-sim"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+ew-proto = { path = "../ew-proto" }
+ew-media = { path = "../ew-media" }
+anyhow.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+rand.workspace = true

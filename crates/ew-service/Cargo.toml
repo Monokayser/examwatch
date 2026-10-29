@@ -1,0 +1,6 @@
+[package]
+name = "ew-service"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]

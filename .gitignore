@@ -1,0 +1,6 @@
+/target/
+/data/
+ew-server.toml
+*.ews
+*.pdb
+.cargo/config.toml

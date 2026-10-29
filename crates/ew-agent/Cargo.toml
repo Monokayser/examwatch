@@ -1,0 +1,6 @@
+[package]
+name = "ew-agent"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]

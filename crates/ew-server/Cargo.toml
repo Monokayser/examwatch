@@ -1,0 +1,35 @@
+[package]
+name = "ew-server"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+ew-proto = { path = "../ew-proto" }
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+quinn.workspace = true
+rustls.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+sha2.workspace = true
+hex.workspace = true
+rand.workspace = true
+axum = { version = "0.7", features = ["ws", "macros"] }
+axum-server = { version = "0.7", features = ["tls-rustls-no-provider"] }
+rusqlite = { version = "0.31", features = ["bundled"] }
+toml = "0.8"
+rcgen = "0.13"
+aes-gcm = "0.10"
+argon2 = "0.5"
+ipnet = "2"
+bytes = "1"
+futures-util = "0.3"
+parking_lot = "0.12"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = ["Win32_Foundation", "Win32_Security_Cryptography", "Win32_System_Memory"] }
+
+[dev-dependencies]
+tempfile = "3"
