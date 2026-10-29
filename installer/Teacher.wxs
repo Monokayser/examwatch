@@ -20,9 +20,7 @@
 
     <!-- Microsoft Edge (present on every Windows 10/11 PC) opens the dashboard as an app window. -->
     <Property Id="EDGE">
-      <RegistrySearch Id="EdgePath" Root="HKLM" Key="SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\msedge.exe" Type="file">
-        <FileSearch Name="msedge.exe" />
-      </RegistrySearch>
+      <RegistrySearch Id="EdgePath" Root="HKLM" Key="SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\msedge.exe" Type="raw" />
     </Property>
     <SetProperty Id="EDGE" Value="[ProgramFilesFolder]Microsoft\Edge\Application\msedge.exe" Before="CostFinalize" Condition="NOT EDGE" Sequence="both" />
 
