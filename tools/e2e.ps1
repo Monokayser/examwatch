@@ -76,9 +76,21 @@ try {
 
     $dupEvery = $PcsPerLab + 2   # one PC types an ID that's already in use
     $sim = Start-Process "$Bin\ew-sim.exe" -PassThru -WindowStyle Hidden `
-        -ArgumentList '--server', '127.0.0.1:14433', '--pin', $pin, '--token', $token, '--labs', "A1-:$PcsPerLab,VA-:$PcsPerLab", '--rec', '640x360', '--dup-every', $dupEvery `
+        -ArgumentList '--server', '127.0.0.1:14433', '--pin', $pin, '--token', $token, '--labs', "A1-:$PcsPerLab,VA-:$PcsPerLab,XX-:2", '--rec', '640x360', '--dup-every', $dupEvery `
         -RedirectStandardOutput "$work\sim.out" -RedirectStandardError "$work\sim.err"
     Start-Sleep -Seconds 8
+
+    # "Assign to lab": the two XX- PCs match no configured lab.
+    $pcs = (Invoke-RestMethod "$base/api/pcs" -Headers $h -WebSession $s).pcs
+    $xx = @($pcs | Where-Object { $_.pc_name -like 'XX-*' })
+    Check ($xx.Count -eq 2 -and @($xx | Where-Object lab_id -ne 'unassigned').Count -eq 0) "PCs from an unknown network land in Unassigned"
+    $moved = Invoke-RestMethod "$base/api/pcs/$($xx[0].machine_id)/assign" -Method Post -Headers $h -WebSession $s -ContentType 'application/json' -Body '{"lab_id":"visarts"}'
+    $pcs = (Invoke-RestMethod "$base/api/pcs" -Headers $h -WebSession $s).pcs
+    Check ($moved.moved -eq 2 -and @($pcs | Where-Object { $_.pc_name -like 'XX-*' -and $_.lab_id -eq 'visarts' }).Count -eq 2) "Assign to lab moves the whole network (2 PCs) with one click"
+    Check (@($pcs | Where-Object { $_.pc_name -like 'A1-*' -and $_.lab_id -ne 'anim1' }).Count -eq 0) "PCs matched by a configured name prefix are not moved"
+    $badLab = $null
+    try { Invoke-RestMethod "$base/api/pcs/$($xx[0].machine_id)/assign" -Method Post -Headers $h -WebSession $s -ContentType 'application/json' -Body '{"lab_id":"nope"}' | Out-Null } catch { $badLab = $_.Exception.Response.StatusCode.value__ }
+    Check ($badLab -eq 400) "assigning to an unknown lab is refused"
 
     $body = @{ name = 'E2E exam'; labs = @('anim1', 'visarts'); roster = '' } | ConvertTo-Json
     $exam = Invoke-RestMethod "$base/api/exams" -Method Post -Headers $h -WebSession $s -ContentType 'application/json' -Body $body
@@ -90,8 +102,8 @@ try {
     Start-Sleep -Seconds $Seconds
 
     $rec = Invoke-RestMethod "$base/api/exams/$($exam.id)/recordings" -Headers $h -WebSession $s
-    $expected = 2 * $PcsPerLab - 1
-    Check ($rec.students.Count -eq $expected) "recordings for $($rec.students.Count) students (expected ${expected}: one duplicate ID blocked)"
+    $expected = 2 * $PcsPerLab + 2 - 1
+    Check ($rec.students.Count -eq $expected) "recordings for $($rec.students.Count) students (expected ${expected}: incl. 2 assigned PCs, one duplicate ID blocked)"
     $labs = $rec.students | Group-Object lab_id
     Check (($labs | Where-Object Name -eq 'anim1').Count -ge 1 -and ($labs | Where-Object Name -eq 'visarts').Count -ge 1) "students assigned to both labs"
     $span = ($rec.students | ForEach-Object { ($_.end_us - $_.start_us) / 1e6 } | Measure-Object -Minimum).Minimum
@@ -108,6 +120,7 @@ try {
     $audit = Invoke-RestMethod "$base/api/audit" -Headers $h -WebSession $s
     Check (@($audit.entries | Where-Object action -eq 'claim_rejected').Count -ge 1) "duplicate ID attempt is in the audit log"
     Check (@($audit.entries | Where-Object action -eq 'view_recording').Count -ge 1) "viewing a recording is audited"
+    Check (@($audit.entries | Where-Object action -eq 'assign_subnet').Count -ge 1) "lab assignment is audited"
 
     $null = Invoke-RestMethod "$base/api/exams/$($exam.id)/close" -Method Post -Headers $h -WebSession $s
     $hist = Invoke-RestMethod "$base/api/exams/history" -Headers $h -WebSession $s

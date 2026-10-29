@@ -98,11 +98,34 @@ impl Config {
 
     /// Picks the lab for a connecting PC: name prefix first (most specific), then subnet.
     pub fn lab_for(&self, ip: IpAddr, pc_name: &str) -> Option<&LabConfig> {
+        self.lab_by_prefix(pc_name).or_else(|| self.lab_by_subnet(ip))
+    }
+
+    pub fn lab_by_prefix(&self, pc_name: &str) -> Option<&LabConfig> {
         let upper = pc_name.to_uppercase();
-        self.labs
-            .iter()
-            .find(|l| l.pc_prefixes.iter().any(|p| upper.starts_with(&p.to_uppercase())))
-            .or_else(|| self.labs.iter().find(|l| l.subnets.iter().any(|n| n.contains(&ip))))
+        self.labs.iter().find(|l| l.pc_prefixes.iter().any(|p| upper.starts_with(&p.to_uppercase())))
+    }
+
+    pub fn lab_by_subnet(&self, ip: IpAddr) -> Option<&LabConfig> {
+        self.labs.iter().find(|l| l.subnets.iter().any(|n| n.contains(&ip)))
+    }
+
+    pub fn has_lab(&self, id: &str) -> bool {
+        self.labs.iter().any(|l| l.id == id)
+    }
+}
+
+/// The network a PC belongs to, as learned by "Assign to lab": /24 for IPv4, /64 for IPv6.
+pub fn subnet_of(ip: IpAddr) -> String {
+    match ip {
+        IpAddr::V4(v) => {
+            let o = v.octets();
+            format!("{}.{}.{}.0/24", o[0], o[1], o[2])
+        }
+        IpAddr::V6(v) => {
+            let s = v.segments();
+            format!("{:x}:{:x}:{:x}:{:x}::/64", s[0], s[1], s[2], s[3])
+        }
     }
 }
 
@@ -171,6 +194,12 @@ mod tests {
         let mut cfg: Config = toml::from_str(EXAMPLE).unwrap();
         cfg.labs[4].pc_prefixes = vec!["pd-".into()];
         assert_eq!(cfg.lab_for("10.10.19.44".parse().unwrap(), "PD-03").unwrap().id, "profdev");
+    }
+
+    #[test]
+    fn subnet_keys() {
+        assert_eq!(subnet_of("10.10.19.44".parse().unwrap()), "10.10.19.0/24");
+        assert_eq!(subnet_of("fd00:1:2:3::9".parse().unwrap()), "fd00:1:2:3::/64");
     }
 
     #[test]

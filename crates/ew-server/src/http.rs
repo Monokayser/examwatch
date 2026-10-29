@@ -71,7 +71,9 @@ pub fn router(hub: Arc<Hub>, secure_cookie: bool, pin: String) -> Router {
         .route("/api/exams/:id/recordings", get(recordings))
         .route("/api/exams/:id/students/:sid/segments", get(segments))
         .route("/api/segments/:id", get(segment_data))
+        .route("/api/pcs", get(list_pcs))
         .route("/api/pcs/:mid/release", post(release_pc))
+        .route("/api/pcs/:mid/assign", post(assign_pc))
         .route("/api/audit", get(audit))
         .route("/ws", get(ws))
         .with_state(state)
@@ -288,6 +290,22 @@ async fn close_exam(State(st): State<Arc<AppState>>, t: Teacher, Path(id): Path<
 async fn release_pc(State(st): State<Arc<AppState>>, t: Teacher, Path(mid): Path<String>) -> Response {
     match st.hub.release_pc(&t.user, &mid) {
         Ok(()) => ok_json(json!({"ok": true})),
+        Err(e) => err(StatusCode::BAD_REQUEST, &e.to_string()),
+    }
+}
+
+async fn list_pcs(State(st): State<Arc<AppState>>, _t: Teacher) -> Response {
+    ok_json(json!({"pcs": st.hub.pc_list()}))
+}
+
+#[derive(Deserialize)]
+struct AssignReq {
+    lab_id: String,
+}
+
+async fn assign_pc(State(st): State<Arc<AppState>>, t: Teacher, Path(mid): Path<String>, Json(req): Json<AssignReq>) -> Response {
+    match st.hub.assign_subnet(&t.user, &mid, &req.lab_id) {
+        Ok(n) => ok_json(json!({"moved": n})),
         Err(e) => err(StatusCode::BAD_REQUEST, &e.to_string()),
     }
 }

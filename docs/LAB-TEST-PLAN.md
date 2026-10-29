@@ -58,14 +58,9 @@ Fill in before you start:
 | C2 | Extract **all** files to the USB stick (same folder) | The folder has `ExamWatch-Student-Setup.exe`, `ExamWatch-Student.msi`, `examwatch-student.cfg` | ☐ |
 | C3 | On Student PC 1 and 2: run `ExamWatch-Student-Setup.exe` from the stick → **Install** | Finishes without errors; a **V1** icon appears on the desktop | ☐ |
 | C4 | Copy only `ExamWatch-Student-Setup.exe` to the desktop of one PC and run it from there | It **refuses** and explains that `examwatch-student.cfg` must be next to it | ☐ |
-| C5 | Look at the dashboard | Both PCs appear within ~10 s. **Known gap:** they appear under **Unassigned** (see the box below) | ☐ |
-
-> **Known gap: labs are not assigned automatically yet.** The one-click "Assign to lab" button from the design (§2.11) is not built in this build. For this test, an administrator on the server PC does the following once:
-> 1. Open `C:\ProgramData\ExamWatch\ew-server.toml` in Notepad (as administrator).
-> 2. Under the lab you are testing (for example `[[labs]] id = "visarts"`), add a line with the student PCs' subnet, for example `subnets = ["10.10.19.0/24"]`. Or add their PC-name prefix: `pc_prefixes = ["VA-"]`.
-> 3. Restart the **ExamWatch Server** service (Services app, or reboot), then reopen the dashboard.
->
-> **Pass:** both PCs now appear under their lab.
+| C5 | Look at the dashboard | Both PCs appear within ~10 s, at first under **Unassigned** (the server doesn't know your lab networks yet) | ☐ |
+| C6 | In the **Unassigned** section, each network is listed (e.g. *Network 10.10.19.0/24 · 1 PC*). Choose the right lab in the drop-down → **Assign** | Both PCs move to their lab at once. No file is edited | ☐ |
+| C7 | Restart one student PC | It comes back **directly in its lab**, not under Unassigned (the network is remembered) | ☐ |
 
 ## D. Exam flow (25 min)
 
@@ -130,7 +125,7 @@ powershell -ExecutionPolicy Bypass -File tools\frametime-compare.ps1 off.csv on.
 
 | # | Step | Pass when | ✔ |
 |---|---|---|---|
-| G1 | On a spare PC, run the simulator for the rest of a lab: `ew-sim.exe --server <server>:4433 --pin <contents of C:\ProgramData\ExamWatch\data\server.fingerprint.txt> --token <enroll_token from ew-server.toml> --labs VA-:27,A1-:28 --rec 1280x720`. Add `pc_prefixes = ["VA-"]` / `["A1-"]` to those labs first | 55 simulated PCs appear and start within ~20 s of opening an exam | ☐ |
+| G1 | On a spare PC, run the simulator for the rest of a lab: `ew-sim.exe --server <server>:4433 --pin <contents of C:\ProgramData\ExamWatch\data\server.fingerprint.txt> --token <enroll_token from C:\ProgramData\ExamWatch\ew-server.toml> --labs VA-:55 --rec 1280x720`. The simulated PCs appear under **Unassigned** (they come from the spare PC's network); assign that network to a lab with **Assign** | 55 simulated PCs appear and start within ~20 s of opening an exam | ☐ |
 | G2 | With 55 simulated + 2 real PCs live, use the **All labs** view and enlarge a few screens | The dashboard stays smooth; the real PCs still meet F1–F4 | ☐ |
 | G3 | Server PC Task Manager | Server CPU below 30 %, network well below its link speed | ☐ |
 
@@ -165,7 +160,6 @@ Also note the step number, what you expected, and what happened (a phone photo o
 **Expected in this build (not failures):**
 * certificate warning when opening the dashboard from a PC other than the server (fix: import `C:\ProgramData\ExamWatch\data\server.crt.pem` into "Trusted Root" on teacher PCs, or push it by GPO);
 * "Windows protected your PC" on the installers (not signed yet);
-* PCs appear under *Unassigned* until labs are set up (box in part C);
 * the mouse pointer is not drawn in recordings;
 * the Google Drive upload of recordings is not built yet (recordings stay on the server PC).
 

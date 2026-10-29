@@ -122,6 +122,12 @@ CREATE TABLE IF NOT EXISTS machines (
     first_seen_us INTEGER NOT NULL,
     last_seen_us INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS subnet_labs (
+    subnet TEXT PRIMARY KEY,
+    lab_id TEXT NOT NULL,
+    assigned_by TEXT NOT NULL,
+    assigned_us INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS audit (
     id INTEGER PRIMARY KEY,
     ts_us INTEGER NOT NULL,
@@ -389,12 +395,35 @@ impl Db {
         Ok(())
     }
 
-    /// Known PCs per lab, so the dashboard can show a PC that never came online.
-    pub fn known_machines(&self) -> Result<Vec<(String, String, String)>> {
+    /// Known PCs (id, name, lab, last IP), so the dashboard can show a PC that never came online.
+    pub fn known_machines(&self) -> Result<Vec<(String, String, String, String)>> {
         let conn = self.conn.lock();
-        let mut stmt = conn.prepare("SELECT machine_id, pc_name, lab_id FROM machines ORDER BY lab_id, pc_name")?;
-        let v = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?.collect::<rusqlite::Result<_>>()?;
+        let mut stmt = conn.prepare("SELECT machine_id, pc_name, lab_id, last_ip FROM machines ORDER BY lab_id, pc_name")?;
+        let v = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?.collect::<rusqlite::Result<_>>()?;
         Ok(v)
+    }
+
+    pub fn set_machine_lab(&self, machine_id: &str, lab_id: &str) -> Result<()> {
+        self.conn.lock().execute("UPDATE machines SET lab_id = ?2 WHERE machine_id = ?1", params![machine_id, lab_id])?;
+        Ok(())
+    }
+
+    // ---- learned subnet → lab ("Assign to lab" in the dashboard) -------------
+
+    pub fn subnet_labs(&self) -> Result<Vec<(String, String)>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare("SELECT subnet, lab_id FROM subnet_labs")?;
+        let v = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?.collect::<rusqlite::Result<_>>()?;
+        Ok(v)
+    }
+
+    pub fn set_subnet_lab(&self, subnet: &str, lab_id: &str, by: &str) -> Result<()> {
+        self.conn.lock().execute(
+            "INSERT INTO subnet_labs (subnet, lab_id, assigned_by, assigned_us) VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(subnet) DO UPDATE SET lab_id = excluded.lab_id, assigned_by = excluded.assigned_by, assigned_us = excluded.assigned_us",
+            params![subnet, lab_id, by, now()],
+        )?;
+        Ok(())
     }
 
     // ---- segments ----------------------------------------------------------

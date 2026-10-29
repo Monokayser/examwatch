@@ -10,7 +10,6 @@ use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use tokio::io::AsyncReadExt;
 use tokio::sync::mpsc;
 
-use crate::config::UNASSIGNED_LAB;
 use crate::hub::Hub;
 
 pub fn endpoint(hub: &Hub, cert: CertificateDer<'static>, key: PrivateKeyDer<'static>) -> Result<quinn::Endpoint> {
@@ -69,7 +68,7 @@ async fn handle(hub: Arc<Hub>, conn: quinn::Connection) -> Result<()> {
     if machine_id.is_empty() || machine_id.len() > 64 || pc_name.is_empty() || pc_name.len() > 64 {
         bail!("bad hello fields");
     }
-    let lab_id = hub.cfg.lab_for(ip, &pc_name).map(|l| l.id.clone()).unwrap_or_else(|| UNASSIGNED_LAB.to_string());
+    let lab_id = hub.resolve_lab(ip, &pc_name);
     let enc_name = serde_json::to_value(encoder)?.as_str().unwrap_or("").to_string();
     hub.db.touch_machine(&machine_id, &pc_name, &lab_id, &ip.to_string(), &enc_name, &gpu)?;
     tracing::info!(%machine_id, %pc_name, %lab_id, %agent_version, ?encoder, "agent connected from {ip}");

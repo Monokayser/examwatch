@@ -42,6 +42,8 @@ pub struct PcInfo {
     pub pc_name: String,
     pub lab_id: String,
     pub ip: String,
+    /// Network key used by "Assign to lab" (e.g. 10.10.19.0/24); empty if unknown.
+    pub subnet: String,
     pub status: PcStatus,
     pub student_id: Option<String>,
     pub exam_id: Option<i64>,
@@ -81,6 +83,8 @@ pub struct Hub {
     pcs: RwLock<HashMap<String, PcEntry>>,
     dashes: RwLock<HashMap<u64, Arc<DashClient>>>,
     open_exams: RwLock<Vec<Exam>>,
+    /// Learned subnet → lab, from "Assign to lab".
+    subnet_labs: RwLock<HashMap<String, String>>,
     next_id: AtomicU64,
 }
 
@@ -104,14 +108,16 @@ impl Hub {
             pcs: RwLock::new(HashMap::new()),
             dashes: RwLock::new(HashMap::new()),
             open_exams: RwLock::new(open),
+            subnet_labs: RwLock::new(db.subnet_labs()?.into_iter().collect()),
             next_id: AtomicU64::new(1),
         });
         // Known PCs appear as Offline tiles from the start, so a PC that never
         // boots is still visible to the teacher.
-        for (machine_id, pc_name, lab_id) in hub.db.known_machines()? {
+        for (machine_id, pc_name, lab_id, ip) in hub.db.known_machines()? {
+            let subnet = ip.parse().map(crate::config::subnet_of).unwrap_or_default();
             hub.pcs.write().insert(machine_id.clone(), PcEntry {
                 info: PcInfo {
-                    machine_id, pc_name, lab_id, ip: String::new(), status: PcStatus::Offline,
+                    machine_id, pc_name, lab_id, ip, subnet, status: PcStatus::Offline,
                     student_id: None, exam_id: None, encoder: None, gpu: String::new(), screen: (0, 0),
                     monitors: 0, cpu_pct: 0.0, rss_mb: 0.0, throttle: 0, since_us: ew_proto::now_us(), viewers: 0,
                 },
@@ -129,6 +135,67 @@ impl Hub {
 
     pub fn lab_name(&self, lab_id: &str) -> String {
         self.cfg.labs.iter().find(|l| l.id == lab_id).map(|l| l.name.clone()).unwrap_or_else(|| "Unassigned".into())
+    }
+
+    /// Lab for a connecting PC: configured name prefix, then a subnet the
+    /// teacher assigned in the dashboard, then configured subnets.
+    pub fn resolve_lab(&self, ip: std::net::IpAddr, pc_name: &str) -> String {
+        if let Some(l) = self.cfg.lab_by_prefix(pc_name) {
+            return l.id.clone();
+        }
+        if let Some(l) = self.subnet_labs.read().get(&crate::config::subnet_of(ip)).filter(|l| self.cfg.has_lab(l)) {
+            return l.clone();
+        }
+        self.cfg.lab_by_subnet(ip).map(|l| l.id.clone()).unwrap_or_else(|| UNASSIGNED_LAB.to_string())
+    }
+
+    /// "Assign to lab": puts this PC's whole network into `lab_id` (remembered for
+    /// PCs that connect later) and moves every PC on it that isn't mid-exam.
+    pub fn assign_subnet(&self, actor: &str, machine_id: &str, lab_id: &str) -> Result<usize> {
+        if !self.cfg.has_lab(lab_id) {
+            bail!("Unknown lab");
+        }
+        let subnet = match self.pcs.read().get(machine_id) {
+            Some(p) if !p.info.subnet.is_empty() => p.info.subnet.clone(),
+            Some(_) => bail!("This PC's network address is not known yet. Wait until it is online."),
+            None => bail!("Unknown PC"),
+        };
+        self.db.set_subnet_lab(&subnet, lab_id, actor)?;
+        self.subnet_labs.write().insert(subnet.clone(), lab_id.to_string());
+        let exam = self.exam_for_lab(lab_id);
+        let mut moved = Vec::new();
+        {
+            let mut pcs = self.pcs.write();
+            for p in pcs.values_mut() {
+                // Name prefixes from the config still win; PCs in an exam are never moved.
+                if p.info.subnet != subnet || p.info.lab_id == lab_id || p.info.status == PcStatus::Live || self.cfg.lab_by_prefix(&p.info.pc_name).is_some() {
+                    continue;
+                }
+                let old_exam = p.info.exam_id;
+                p.info.lab_id = lab_id.to_string();
+                p.info.student_id = None;
+                p.info.exam_id = exam.as_ref().map(|e| e.id);
+                if p.info.status != PcStatus::Offline {
+                    p.info.status = if exam.is_some() { PcStatus::Waiting } else { PcStatus::Idle };
+                    if let Some(tx) = &p.ctl {
+                        if let Some(old) = old_exam.filter(|o| Some(*o) != exam.as_ref().map(|e| e.id)) {
+                            let _ = tx.try_send(ServerMsg::ExamClosed { exam_id: old });
+                        }
+                        if let Some(e) = &exam {
+                            let _ = tx.try_send(ServerMsg::ExamOpened { exam: Self::exam_info(e) });
+                        }
+                    }
+                }
+                moved.push(p.info.machine_id.clone());
+            }
+        }
+        for m in &moved {
+            let _ = self.db.set_machine_lab(m, lab_id);
+            self.publish_pc(m);
+        }
+        self.db.audit(actor, "assign_subnet", &format!("{subnet} -> {lab_id} ({} PCs)", moved.len()));
+        self.toast("info", lab_id, format!("Network {subnet} assigned to {}: {} PC(s) moved", self.lab_name(lab_id), moved.len()));
+        Ok(moved.len())
     }
 
     pub fn exam_for_lab(&self, lab_id: &str) -> Option<Exam> {
@@ -180,6 +247,7 @@ impl Hub {
             machine_id: machine_id.to_string(),
             pc_name: pc_name.to_string(),
             lab_id: lab_id.to_string(),
+            subnet: ip.parse().map(crate::config::subnet_of).unwrap_or_default(),
             ip,
             status,
             student_id: student,

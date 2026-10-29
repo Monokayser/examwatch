@@ -247,11 +247,12 @@ function renderGrid() {
       sec = document.createElement("section");
       sec.className = "lab-section";
       sec.dataset.lab = labId;
-      sec.innerHTML = `<div class="lab-head"><h2></h2><span class="muted"></span></div><div class="grid"></div>`;
+      sec.innerHTML = `<div class="lab-head"><h2></h2><span class="muted"></span></div><div class="assign"></div><div class="grid"></div>`;
     }
     sec.querySelector("h2").textContent = labName(labId);
     sec.querySelector(".lab-head").hidden = S.lab !== "*";
     sec.querySelector(".muted").textContent = labSummary(labId);
+    renderAssign(sec.querySelector(".assign"), labId === "unassigned" ? list : []);
     const grid = sec.querySelector(".grid");
     list.forEach((p, i) => {
       let t = S.tiles.get(p.machine_id);
@@ -269,6 +270,33 @@ function renderGrid() {
   empty.hidden = pcs.length > 0;
   empty.textContent = S.q ? "No screens match your search." : "No student PCs have connected to this lab yet.";
   renderCounts();
+}
+
+// "Assign to lab": one row per network among unassigned PCs. Rebuilt only when the
+// set of networks changes, so a half-made choice in a <select> is never reset.
+function renderAssign(slot, list) {
+  const groups = new Map();
+  for (const p of list) {
+    const k = p.subnet || "";
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(p);
+  }
+  const key = [...groups].map(([k, v]) => k + ":" + v.length).join("|");
+  if (slot.dataset.key === key) return;
+  slot.dataset.key = key;
+  if (!groups.size) { slot.innerHTML = ""; return; }
+  const labs = S.labs.filter((l) => l.id !== "unassigned");
+  const opts = `<option value="">Choose a lab…</option>` + labs.map((l) => `<option value="${esc(l.id)}">${esc(l.name)}</option>`).join("");
+  slot.innerHTML = `<div class="assign-bar">${icon("info")}<div><strong>These PCs aren't in a lab yet.</strong> ` +
+    `Choose the lab for each network once. PCs that join later from the same network go there automatically.</div></div>` +
+    [...groups].map(([subnet, pcs]) => {
+      const pick = pcs.find((p) => p.status !== "offline") || pcs[0];
+      const label = subnet ? `Network ${esc(subnet)}` : "Unknown network";
+      return `<div class="assign-row"><span class="assign-net">${label}</span><span class="muted">${pcs.length} PC${pcs.length === 1 ? "" : "s"}: ` +
+        `${pcs.slice(0, 4).map((p) => esc(p.pc_name)).join(", ")}${pcs.length > 4 ? "…" : ""}</span>` +
+        `<select aria-label="Lab for ${label}" ${subnet ? "" : "disabled"}>${opts}</select>` +
+        `<button class="btn btn-primary btn-sm" type="button" data-assign="${esc(pick.machine_id)}" ${subnet ? "" : "disabled"}>Assign</button></div>`;
+    }).join("");
 }
 
 function labSummary(labId) {
@@ -714,6 +742,16 @@ function wire() {
     renderGrid();
   });
   $("search").addEventListener("input", (e) => { S.q = e.target.value; renderGrid(); });
+  $("grid-root").addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-assign]"); if (!b) return;
+    const sel = b.parentElement.querySelector("select");
+    if (!sel.value) { sel.focus(); toast("info", "Choose a lab first."); return; }
+    b.disabled = true;
+    try {
+      const j = await api(`/api/pcs/${encodeURIComponent(b.dataset.assign)}/assign`, { method: "POST", body: { lab_id: sel.value } });
+      if (!j.moved) toast("info", "No PCs were moved (PCs in a running exam stay where they are).");
+    } catch (err) { toast("alert", err.message); b.disabled = false; }
+  });
 
   $("open-exam-btn").onclick = openExamDialog;
   $("exam-roster").addEventListener("input", updateRosterCount);
