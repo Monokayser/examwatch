@@ -172,7 +172,9 @@ impl Hub {
         let status = match (&exam, &student) {
             (None, _) => PcStatus::Idle,
             (Some(_), None) => PcStatus::Waiting,
-            (Some(_), Some(_)) => PcStatus::Waiting, // becomes Live when the agent re-claims
+            // Already registered in this exam (reconnect, agent restart, reboot):
+            // live immediately, so the buffered recording it uploads first is kept.
+            (Some(_), Some(_)) => PcStatus::Live,
         };
         let info = PcInfo {
             machine_id: machine_id.to_string(),
@@ -180,7 +182,7 @@ impl Hub {
             lab_id: lab_id.to_string(),
             ip,
             status,
-            student_id: None,
+            student_id: student,
             exam_id: exam.as_ref().map(|e| e.id),
             encoder: Some(encoder),
             gpu,
