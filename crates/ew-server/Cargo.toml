@@ -23,7 +23,7 @@ toml = "0.8"
 rcgen = "0.13"
 aes-gcm = "0.10"
 argon2 = "0.5"
-ipnet = "2"
+ipnet = { version = "2", features = ["serde"] }
 bytes = "1"
 futures-util = "0.3"
 parking_lot = "0.12"

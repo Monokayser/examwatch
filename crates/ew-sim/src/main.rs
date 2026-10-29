@@ -305,7 +305,7 @@ fn encode_loop(idx: u32, rec: (u32, u32), h: ClientHandle, flags: Arc<PcFlags>, 
             }
         }
         let ts = ew_proto::now_us();
-        let mut emit = |kind: StreamKind, enc: &mut H264Encoder, nv12: &[u8], w: u32, hh: u32| -> Result<()> {
+        let emit = |kind: StreamKind, enc: &mut H264Encoder, nv12: &[u8], w: u32, hh: u32| -> Result<()> {
             let t0 = Instant::now();
             for f in enc.encode(Input::Nv12(nv12), ts)? {
                 stats.frames.fetch_add(1, Ordering::Relaxed);

@@ -556,8 +556,8 @@ impl Hub {
 
     /// Teacher frees a PC's Student ID (wrong ID typed, or the student moved PCs).
     pub fn release_pc(&self, actor: &str, machine_id: &str) -> Result<()> {
-        let (exam, lab) = match self.pcs.read().get(machine_id) {
-            Some(p) => (p.info.exam_id, p.info.lab_id.clone()),
+        let exam = match self.pcs.read().get(machine_id) {
+            Some(p) => p.info.exam_id,
             None => bail!("Unknown PC"),
         };
         let Some(exam) = exam else { bail!("No exam open on this PC") };
