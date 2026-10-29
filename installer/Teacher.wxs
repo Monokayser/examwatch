@@ -47,16 +47,23 @@
           <fw:FirewallException Id="FwAgents" Name="ExamWatch: student PCs (UDP 4433)" Protocol="udp" Port="4433" Scope="any" Profile="all" />
           <fw:FirewallException Id="FwDashboard" Name="ExamWatch: teacher dashboard (TCP 8443)" Protocol="tcp" Port="8443" Scope="any" Profile="all" />
         </Component>
-        <Component Id="Docs">
+        <!-- One unversioned file per component (Windows Installer component rules). -->
+        <Component Id="DocLicense">
           <File Id="LicenseTxt" Source="$(RepoDir)\LICENSE" Name="LICENSE.txt" KeyPath="yes" />
-          <File Id="NoticeTxt" Source="$(RepoDir)\NOTICE" Name="NOTICE.txt" />
-          <File Id="PrivacyMd" Source="$(RepoDir)\PRIVACY.md" Name="PRIVACY.md" />
+        </Component>
+        <Component Id="DocNotice">
+          <File Id="NoticeTxt" Source="$(RepoDir)\NOTICE" Name="NOTICE.txt" KeyPath="yes" />
+        </Component>
+        <Component Id="DocPrivacy">
+          <File Id="PrivacyMd" Source="$(RepoDir)\PRIVACY.md" Name="PRIVACY.md" KeyPath="yes" />
         </Component>
         <Directory Id="StudentDir" Name="student">
+          <!-- Served to teachers by "Add student PCs" in the dashboard. -->
           <Component Id="StudentMsi">
-            <!-- Served to teachers by "Add student PCs" in the dashboard. -->
             <File Id="StudentMsiFile" Source="$(StudentMsi)" Name="ExamWatch-Student.msi" KeyPath="yes" />
-            <File Id="StudentExeFile" Source="$(StudentExe)" Name="ExamWatch-Student-Setup.exe" />
+          </Component>
+          <Component Id="StudentExe">
+            <File Id="StudentExeFile" Source="$(StudentExe)" Name="ExamWatch-Student-Setup.exe" KeyPath="yes" />
           </Component>
         </Directory>
       </Directory>
@@ -91,8 +98,11 @@
 
     <Feature Id="Main" Title="ExamWatch Teacher" Level="1">
       <ComponentRef Id="Server" />
-      <ComponentRef Id="Docs" />
+      <ComponentRef Id="DocLicense" />
+      <ComponentRef Id="DocNotice" />
+      <ComponentRef Id="DocPrivacy" />
       <ComponentRef Id="StudentMsi" />
+      <ComponentRef Id="StudentExe" />
       <ComponentRef Id="DesktopShortcut" />
       <ComponentRef Id="StartShortcut" />
     </Feature>

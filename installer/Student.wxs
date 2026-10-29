@@ -30,10 +30,15 @@
         <Component Id="Agent">
           <File Id="AgentExe" Source="$(BinDir)\ew-agent.exe" KeyPath="yes" />
         </Component>
-        <Component Id="Docs">
+        <!-- One unversioned file per component (Windows Installer component rules). -->
+        <Component Id="DocLicense">
           <File Id="LicenseTxt" Source="$(RepoDir)\LICENSE" Name="LICENSE.txt" KeyPath="yes" />
-          <File Id="NoticeTxt" Source="$(RepoDir)\NOTICE" Name="NOTICE.txt" />
-          <File Id="PrivacyMd" Source="$(RepoDir)\PRIVACY.md" Name="PRIVACY.md" />
+        </Component>
+        <Component Id="DocNotice">
+          <File Id="NoticeTxt" Source="$(RepoDir)\NOTICE" Name="NOTICE.txt" KeyPath="yes" />
+        </Component>
+        <Component Id="DocPrivacy">
+          <File Id="PrivacyMd" Source="$(RepoDir)\PRIVACY.md" Name="PRIVACY.md" KeyPath="yes" />
         </Component>
       </Directory>
     </StandardDirectory>
@@ -68,7 +73,9 @@
     <Feature Id="Main" Title="ExamWatch Student" Level="1">
       <ComponentRef Id="Service" />
       <ComponentRef Id="Agent" />
-      <ComponentRef Id="Docs" />
+      <ComponentRef Id="DocLicense" />
+      <ComponentRef Id="DocNotice" />
+      <ComponentRef Id="DocPrivacy" />
       <ComponentRef Id="V1Desktop" />
       <ComponentRef Id="V1Start" />
     </Feature>
