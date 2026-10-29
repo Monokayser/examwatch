@@ -63,6 +63,7 @@
           <Component Id="StudentMsi">
             <!-- Served to teachers by "Add student PCs" in the dashboard. -->
             <File Id="StudentMsiFile" Source="$(StudentMsi)" Name="ExamWatch-Student.msi" KeyPath="yes" />
+            <File Id="StudentExeFile" Source="$(StudentExe)" Name="ExamWatch-Student-Setup.exe" />
           </Component>
         </Directory>
       </Directory>

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ExamWatch-Teacher-Setup.exe: friendly setup wizard around ExamWatch-Teacher.msi.
+     Licence → Install → "Launch" opens the dashboard (first run asks for the admin password). -->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+  <Bundle Name="ExamWatch Teacher" Manufacturer="ExamWatch" Version="$(Version)"
+          UpgradeCode="812d3d13-a063-4826-a8a7-5ff73a802b0f" IconSourceFile="$(IconFile)"
+          AboutUrl="https://github.com/Monokayser/examwatch">
+    <BootstrapperApplication>
+      <bal:WixStandardBootstrapperApplication LicenseFile="License.rtf" Theme="rtfLicense" SuppressOptionsUI="yes" />
+    </BootstrapperApplication>
+
+    <util:RegistrySearch Id="EdgeSearch" Root="HKLM" Key="SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\msedge.exe" Variable="EDGE" Result="value" />
+    <Variable Name="LaunchTarget" Value="[EDGE]" />
+    <Variable Name="LaunchArguments" Value="--app=https://localhost:8443/" />
+
+    <bal:Condition Message="ExamWatch needs 64-bit Windows 10 (version 22H2) or Windows 11." Condition="VersionNT64 &gt;= v10.0" />
+
+    <Chain>
+      <MsiPackage SourceFile="$(TeacherMsi)" Visible="no" />
+    </Chain>
+  </Bundle>
+</Wix>

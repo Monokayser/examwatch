@@ -20,12 +20,16 @@ function Msi($args_) {
     $p = Start-Process msiexec.exe -ArgumentList $args_ -Wait -PassThru
     return $p.ExitCode
 }
+function Setup($exe, $args_) {
+    $p = Start-Process $exe -ArgumentList $args_ -Wait -PassThru
+    return $p.ExitCode
+}
 $work = Join-Path ([IO.Path]::GetTempPath()) ("ew-inst-" + [guid]::NewGuid().ToString('N').Substring(0, 8))
 New-Item -ItemType Directory $work | Out-Null
 
 try {
-    $rc = Msi @('/i', "`"$Dist\ExamWatch-Teacher-Setup.msi`"", '/qn', '/l*v', "`"$work\teacher.log`"")
-    Check ($rc -eq 0) "Teacher MSI installs silently (exit $rc)"
+    $rc = Setup "$Dist\ExamWatch-Teacher-Setup.exe" @('/quiet', '/norestart', '/log', "`"$work\teacher.log`"")
+    Check ($rc -eq 0) "ExamWatch-Teacher-Setup.exe installs (exit $rc)"
     $svc = Get-Service ExamWatchServer -ErrorAction SilentlyContinue
     Check ($svc -and $svc.Status -eq 'Running') "ExamWatch Server service is running"
     Check (Test-Path "$env:ProgramData\ExamWatch\ew-server.toml") "server settings created in ProgramData"
@@ -45,10 +49,16 @@ try {
 
     Invoke-WebRequest "$base/api/student-installer" -Headers $h -WebSession $s -OutFile "$work\student.zip" -UseBasicParsing
     Expand-Archive "$work\student.zip" "$work\student"
-    Check ((Test-Path "$work\student\ExamWatch-Student.msi") -and (Test-Path "$work\student\examwatch-student.cfg")) "student ZIP has the MSI and the settings file"
+    Check ((Test-Path "$work\student\ExamWatch-Student-Setup.exe") -and (Test-Path "$work\student\ExamWatch-Student.msi") -and (Test-Path "$work\student\examwatch-student.cfg")) "student ZIP has the setup .exe, the MSI and the settings file"
 
-    $rc = Msi @('/i', "`"$work\student\ExamWatch-Student.msi`"", '/qn', '/l*v', "`"$work\student.log`"")
-    Check ($rc -eq 0) "Student MSI installs silently from the extracted folder (exit $rc)"
+    # Without the settings file the student setup must refuse up front.
+    New-Item -ItemType Directory "$work\exeonly" | Out-Null
+    Copy-Item "$work\student\ExamWatch-Student-Setup.exe" "$work\exeonly\"
+    $rc = Setup "$work\exeonly\ExamWatch-Student-Setup.exe" @('/quiet', '/norestart')
+    Check ($rc -ne 0 -and -not (Get-Service ExamWatchService -ErrorAction SilentlyContinue)) "student setup without examwatch-student.cfg refuses (exit $rc)"
+
+    $rc = Setup "$work\student\ExamWatch-Student-Setup.exe" @('/quiet', '/norestart', '/log', "`"$work\student.log`"")
+    Check ($rc -eq 0) "ExamWatch-Student-Setup.exe installs from the extracted folder (exit $rc)"
     $reg = Get-ItemProperty 'HKLM:\SOFTWARE\ExamWatch' -ErrorAction SilentlyContinue
     Check ($reg -and $reg.Server -match ':4433$' -and $reg.ServerPin.Length -eq 64) "student settings written to HKLM (server $($reg.Server))"
     $ss = Get-Service ExamWatchService -ErrorAction SilentlyContinue
@@ -58,12 +68,13 @@ try {
     # A student MSI without its settings file must refuse to install.
     New-Item -ItemType Directory "$work\nocfg" | Out-Null
     Copy-Item "$work\student\ExamWatch-Student.msi" "$work\nocfg\"
-    $rc = Msi @('/x', "`"$work\student\ExamWatch-Student.msi`"", '/qn')
+    $rc = Setup "$work\student\ExamWatch-Student-Setup.exe" @('/uninstall', '/quiet', '/norestart')
+    Check ($rc -eq 0 -and -not (Get-Service ExamWatchService -ErrorAction SilentlyContinue)) "student setup uninstalls; service removed"
     $rc2 = Msi @('/i', "`"$work\nocfg\ExamWatch-Student.msi`"", '/qn', '/l*v', "`"$work\nocfg.log`"")
     Check ($rc2 -ne 0 -and -not (Get-Service ExamWatchService -ErrorAction SilentlyContinue)) "student MSI without examwatch-student.cfg rolls back cleanly"
 
-    $rc = Msi @('/x', "`"$Dist\ExamWatch-Teacher-Setup.msi`"", '/qn')
-    Check ($rc -eq 0 -and -not (Get-Service ExamWatchServer -ErrorAction SilentlyContinue)) "Teacher MSI uninstalls; service removed"
+    $rc = Setup "$Dist\ExamWatch-Teacher-Setup.exe" @('/uninstall', '/quiet', '/norestart')
+    Check ($rc -eq 0 -and -not (Get-Service ExamWatchServer -ErrorAction SilentlyContinue)) "teacher setup uninstalls; service removed"
     Check (Test-Path "$env:ProgramData\ExamWatch\data\master.key") "keys and recordings kept after uninstall (until retention / manual delete)"
 }
 catch {

@@ -61,8 +61,10 @@
 
     <!-- Settings (server, certificate pin, token) from examwatch-student.cfg next to the MSI.
          Runs before the service starts so the agent connects immediately. -->
+    <Property Id="CFGDIR" Secure="yes" />
+    <SetProperty Id="CFGDIR" Value="[SourceDir]" After="ResolveSource" Sequence="execute" Condition="NOT CFGDIR AND NOT Installed" />
     <CustomAction Id="ImportConfig" Directory="INSTALLFOLDER" Execute="deferred" Impersonate="no" Return="check"
-                  ExeCommand="&quot;[INSTALLFOLDER]ew-service.exe&quot; import-config &quot;[SourceDir]examwatch-student.cfg&quot;" />
+                  ExeCommand="&quot;[INSTALLFOLDER]ew-service.exe&quot; import-config &quot;[CFGDIR]examwatch-student.cfg&quot;" />
     <InstallExecuteSequence>
       <ResolveSource After="CostInitialize" Condition="NOT Installed" />
       <Custom Action="ImportConfig" After="InstallFiles" Condition="NOT Installed" />

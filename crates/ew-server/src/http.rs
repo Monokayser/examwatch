@@ -417,9 +417,9 @@ pub fn student_cfg(host: &str, port: u16, pin: &str, token: &str) -> String {
 }
 
 const STUDENT_README: &str = "ExamWatch student installer\r\n\r\n\
-1. Extract BOTH files into the same folder (USB stick or network share).\r\n\
-2. On each student PC, double-click ExamWatch-Student.msi: Next, Install, Finish.\r\n   \
-Or assign the MSI from that share with Group Policy.\r\n\
+1. Extract ALL files into the same folder (USB stick or network share).\r\n\
+2. On each student PC, double-click ExamWatch-Student-Setup.exe: Install, Finish.\r\n   \
+Or assign ExamWatch-Student.msi from that share with Group Policy.\r\n\
 3. The PC appears in the teacher dashboard by itself.\r\n\r\n\
 Keep these files private: examwatch-student.cfg lets a PC join this ExamWatch server.\r\n";
 
@@ -433,6 +433,11 @@ async fn student_installer(State(st): State<Arc<AppState>>, t: Teacher, headers:
         use std::io::Write;
         let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
         let opts = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+        let exe = msi.with_file_name("ExamWatch-Student-Setup.exe");
+        if exe.exists() {
+            zip.start_file("ExamWatch-Student-Setup.exe", opts)?;
+            zip.write_all(&std::fs::read(&exe)?)?;
+        }
         zip.start_file("ExamWatch-Student.msi", opts)?;
         zip.write_all(&std::fs::read(&msi)?)?;
         zip.start_file("examwatch-student.cfg", opts)?;
