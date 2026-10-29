@@ -70,7 +70,7 @@ pub fn open_primary() -> Result<Gpu> {
         let device = device.context("no device")?;
         let ctx = ctx.context("no context")?;
         // Media Foundation uses the device from its own threads.
-        if let Ok(mt) = device.cast::<ID3D10Multithread>() {
+        if let Ok(mt) = device.cast::<ID3D11Multithread>() {
             let _ = mt.SetMultithreadProtected(true);
         }
         // Lowest GPU scheduling priority: the student's apps always go first.
