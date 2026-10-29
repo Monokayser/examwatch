@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ExamWatch Teacher: installed on the PC that acts as the ExamWatch server.
+  Installs the server as a Windows service, generates its settings, keys and
+  certificate (first install only), opens the firewall ports, trusts its own
+  certificate on this PC, and adds an "ExamWatch" shortcut that opens the
+  dashboard. The first launch asks for the administrator password.
+  Build: wix build Teacher.wxs -ext WixToolset.UI.wixext -ext WixToolset.Firewall.wixext -arch x64 -d BinDir=... -d Version=... -d StudentMsi=...
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui"
+     xmlns:fw="http://wixtoolset.org/schemas/v4/wxs/firewall">
+  <Package Name="ExamWatch Teacher" Manufacturer="ExamWatch" Version="$(Version)"
+           UpgradeCode="5c477e81-d266-4fab-a480-c8975409777e" Scope="perMachine" InstallerVersion="500" Compressed="yes">
+    <MajorUpgrade DowngradeErrorMessage="A newer version of ExamWatch Teacher is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+    <Icon Id="app.ico" SourceFile="$(IconFile)" />
+    <Property Id="ARPPRODUCTICON" Value="app.ico" />
+    <Property Id="ARPNOMODIFY" Value="1" />
+    <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
+
+    <!-- Microsoft Edge (present on every Windows 10/11 PC) opens the dashboard as an app window. -->
+    <Property Id="EDGE">
+      <RegistrySearch Id="EdgePath" Root="HKLM" Key="SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\msedge.exe" Type="file">
+        <FileSearch Name="msedge.exe" />
+      </RegistrySearch>
+    </Property>
+    <SetProperty Id="EDGE" Value="[ProgramFilesFolder]Microsoft\Edge\Application\msedge.exe" Before="CostFinalize" Condition="NOT EDGE" Sequence="both" />
+
+    <UI>
+      <ui:WixUI Id="WixUI_Minimal" />
+      <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="OpenDashboard"
+               Condition="WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 AND NOT Installed" />
+    </UI>
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Open ExamWatch now" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
+    <CustomAction Id="OpenDashboard" Property="EDGE" ExeCommand="--app=https://localhost:8443/" Return="asyncNoWait" Impersonate="yes" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="ExamWatch Server">
+        <Component Id="Server">
+          <File Id="ServerExe" Source="$(BinDir)\ew-server.exe" KeyPath="yes" />
+          <ServiceInstall Name="ExamWatchServer" DisplayName="ExamWatch Server"
+                          Description="Receives student screens, records exams and serves the ExamWatch teacher dashboard."
+                          Type="ownProcess" Start="auto" ErrorControl="normal" Account="LocalSystem" Vital="yes"
+                          Arguments="--config &quot;[CommonAppDataFolder]ExamWatch\ew-server.toml&quot; service">
+            <ServiceConfigFailureActions OnInstall="yes" OnReinstall="yes" ResetPeriod="86400">
+              <Failure Action="restartService" Delay="2000" />
+              <Failure Action="restartService" Delay="5000" />
+              <Failure Action="restartService" Delay="10000" />
+            </ServiceConfigFailureActions>
+          </ServiceInstall>
+          <ServiceControl Id="ServerControl" Name="ExamWatchServer" Start="install" Stop="both" Remove="uninstall" Wait="yes" />
+          <fw:FirewallException Id="FwAgents" Name="ExamWatch: student PCs (UDP 4433)" Protocol="udp" Port="4433" Scope="any" Profile="all" />
+          <fw:FirewallException Id="FwDashboard" Name="ExamWatch: teacher dashboard (TCP 8443)" Protocol="tcp" Port="8443" Scope="any" Profile="all" />
+        </Component>
+        <Component Id="Docs">
+          <File Id="LicenseTxt" Source="$(RepoDir)\LICENSE" Name="LICENSE.txt" KeyPath="yes" />
+          <File Id="NoticeTxt" Source="$(RepoDir)\NOTICE" Name="NOTICE.txt" />
+          <File Id="PrivacyMd" Source="$(RepoDir)\PRIVACY.md" Name="PRIVACY.md" />
+        </Component>
+        <Directory Id="StudentDir" Name="student">
+          <Component Id="StudentMsi">
+            <!-- Served to teachers by "Add student PCs" in the dashboard. -->
+            <File Id="StudentMsiFile" Source="$(StudentMsi)" Name="ExamWatch-Student.msi" KeyPath="yes" />
+          </Component>
+        </Directory>
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="DesktopFolder">
+      <Component Id="DesktopShortcut" Guid="e3b8c4d1-5a6f-4b2e-8c9d-7f0a1b2c3d4e">
+        <Shortcut Id="DashDesktop" Name="ExamWatch" Description="Open the ExamWatch teacher dashboard"
+                  Target="[EDGE]" Arguments="--app=https://localhost:8443/" Icon="app.ico" />
+        <RegistryValue Root="HKLM" Key="SOFTWARE\ExamWatch\Installer" Name="DashDesktop" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Component Id="StartShortcut" Guid="a7d2e9f0-3c4b-4e1a-9f8d-2b6c5e4a3f10">
+        <Shortcut Id="DashStart" Name="ExamWatch" Description="Open the ExamWatch teacher dashboard"
+                  Target="[EDGE]" Arguments="--app=https://localhost:8443/" Icon="app.ico" />
+        <RegistryValue Root="HKLM" Key="SOFTWARE\ExamWatch\Installer" Name="DashStart" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+
+    <!-- First install only: settings, enrolment token, master key and certificate in ProgramData
+         (kept on uninstall/upgrade so recordings and keys survive), then trust the certificate
+         on this PC so Edge opens the dashboard without a warning. -->
+    <CustomAction Id="InitServer" Directory="INSTALLFOLDER" Execute="deferred" Impersonate="no" Return="check"
+                  ExeCommand="&quot;[INSTALLFOLDER]ew-server.exe&quot; --config &quot;[CommonAppDataFolder]ExamWatch\ew-server.toml&quot; init --data-dir &quot;[CommonAppDataFolder]ExamWatch\data&quot;" />
+    <CustomAction Id="TrustCert" Directory="INSTALLFOLDER" Execute="deferred" Impersonate="no" Return="ignore"
+                  ExeCommand="&quot;[SystemFolder]certutil.exe&quot; -f -addstore Root &quot;[CommonAppDataFolder]ExamWatch\data\server.crt.pem&quot;" />
+    <InstallExecuteSequence>
+      <Custom Action="InitServer" After="InstallFiles" Condition="NOT REMOVE" />
+      <Custom Action="TrustCert" After="InitServer" Condition="NOT REMOVE" />
+    </InstallExecuteSequence>
+
+    <Feature Id="Main" Title="ExamWatch Teacher" Level="1">
+      <ComponentRef Id="Server" />
+      <ComponentRef Id="Docs" />
+      <ComponentRef Id="StudentMsi" />
+      <ComponentRef Id="DesktopShortcut" />
+      <ComponentRef Id="StartShortcut" />
+    </Feature>
+  </Package>
+</Wix>

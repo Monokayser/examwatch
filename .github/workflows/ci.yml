@@ -57,6 +57,32 @@ jobs:
           }
           Copy-Item LICENSE, NOTICE, README.md, PRIVACY.md dist/
 
+      - name: Install WiX Toolset 5
+        run: |
+          dotnet tool install --global wix --version 5.0.2
+          wix extension add -g WixToolset.UI.wixext/5.0.2
+          wix extension add -g WixToolset.Firewall.wixext/5.0.2
+
+      - name: Build installers
+        shell: pwsh
+        run: |
+          $v = (Select-String -Path Cargo.toml -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value
+          $bin = (Resolve-Path target/release).Path
+          $repo = (Get-Location).Path
+          $ico = (Resolve-Path installer/app.ico).Path
+          wix build installer/Student.wxs -arch x64 -ext WixToolset.UI.wixext -bindpath installer `
+            -d BinDir=$bin -d RepoDir=$repo -d IconFile=$ico -d Version=$v -o dist/ExamWatch-Student.msi
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $student = (Resolve-Path dist/ExamWatch-Student.msi).Path
+          wix build installer/Teacher.wxs -arch x64 -ext WixToolset.UI.wixext -ext WixToolset.Firewall.wixext -bindpath installer `
+            -d BinDir=$bin -d RepoDir=$repo -d IconFile=$ico -d Version=$v -d StudentMsi=$student -o dist/ExamWatch-Teacher-Setup.msi
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          Remove-Item dist/*.wixpdb -ErrorAction SilentlyContinue
+
+      - name: Installer test (install, first run, student ZIP, uninstall)
+        shell: pwsh
+        run: ./tools/installer-test.ps1 -Dist dist
+
       - name: Upload unsigned build
         id: upload
         uses: actions/upload-artifact@v4

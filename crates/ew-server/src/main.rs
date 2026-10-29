@@ -4,7 +4,8 @@
 //! ew-server init                         write ew-server.toml if missing
 //! ew-server add-teacher <name> [--admin]  password from EW_PASSWORD or stdin
 //! ew-server fingerprint                  print the certificate pin for the GPO
-//! ew-server [run]                        start serving
+//! ew-server [run]                        start serving (console)
+//! ew-server service                      start serving under the Windows service manager
 //! ```
 //! `--config <path>` (default `ew-server.toml`) works with every command.
 
@@ -16,6 +17,8 @@ mod hub;
 mod ingest;
 mod recorder;
 mod retention;
+#[cfg(windows)]
+mod winsvc;
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -25,11 +28,11 @@ use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 
 use config::Config;
 
-fn main() -> Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info,quinn=warn".into()))
-        .init();
+fn filter() -> tracing_subscriber::EnvFilter {
+    tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info,quinn=warn".into())
+}
 
+fn main() -> Result<()> {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
     let cfg_path = match args.iter().position(|a| a == "--config") {
         Some(i) if i + 1 < args.len() => {
@@ -41,6 +44,9 @@ fn main() -> Result<()> {
         None => PathBuf::from("ew-server.toml"),
     };
     let cmd = args.first().map(String::as_str).unwrap_or("run");
+    if cmd != "service" {
+        tracing_subscriber::fmt().with_env_filter(filter()).init();
+    }
 
     match cmd {
         // Used by the teacher installer: idempotent, no prompts. Writes a config
@@ -102,6 +108,8 @@ fn main() -> Result<()> {
             println!("{}", ew_proto::tls::fingerprint(cert.as_ref()));
             Ok(())
         }
+        #[cfg(windows)]
+        "service" => winsvc::start(cfg_path),
         "run" => {
             let cfg = Config::load(&cfg_path)?;
             tokio::runtime::Builder::new_multi_thread().enable_all().build()?.block_on(run(cfg))
@@ -110,7 +118,7 @@ fn main() -> Result<()> {
     }
 }
 
-async fn run(cfg: Config) -> Result<()> {
+pub async fn run(cfg: Config) -> Result<()> {
     if cfg.enroll_token.starts_with("CHANGE-ME") {
         tracing::warn!("enroll_token is still the example value; change it before deployment");
     }

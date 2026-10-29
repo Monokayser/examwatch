@@ -12,9 +12,10 @@
   <main id="login" class="login" hidden>
     <form id="login-form" class="login-card" autocomplete="on">
       <div class="brand brand-lg"><span class="ico" data-i="shield"></span><span>ExamWatch</span></div>
-      <p class="muted">Teacher sign-in</p>
+      <p class="muted" id="login-sub">Teacher sign-in</p>
       <label class="field"><span>Username</span><input id="login-user" name="username" autocomplete="username" required></label>
       <label class="field"><span>Password</span><input id="login-pass" name="password" type="password" autocomplete="current-password" required></label>
+      <label class="field" id="login-confirm-row" hidden><span>Type the password again</span><input id="login-confirm" type="password" autocomplete="new-password"></label>
       <p id="login-error" class="form-error" role="alert"></p>
       <button class="btn btn-primary btn-block" id="login-btn" type="submit">Sign in</button>
     </form>
@@ -26,6 +27,7 @@
       <div class="brand"><span class="ico" data-i="shield"></span><span>ExamWatch</span></div>
       <nav id="lab-tabs" class="tabs" role="tablist" aria-label="Labs"></nav>
       <div class="topbar-right">
+        <button class="btn btn-ghost" id="add-pcs" type="button" title="Download the installer for student PCs"><span class="ico" data-i="download"></span><span>Add student PCs</span></button>
         <button class="btn btn-ghost" id="nav-recordings" type="button"><span class="ico" data-i="film"></span><span>Recordings</span></button>
         <button class="btn btn-ghost btn-icon" id="logout" type="button" title="Sign out" aria-label="Sign out"><span class="ico" data-i="logout"></span></button>
       </div>

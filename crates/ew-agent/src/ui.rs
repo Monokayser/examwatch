@@ -98,11 +98,12 @@ pub fn run(shared: Arc<Shared>, net: ClientHandle, show_v1: bool) -> Result<()> 
         let inst: HINSTANCE = GetModuleHandleW(None)?.into();
         let cursor = LoadCursorW(None, IDC_ARROW)?;
         let white = HBRUSH(GetStockObject(WHITE_BRUSH).0);
-        for (class, proc_) in [
-            (MAIN_CLASS, Some(main_proc) as WNDPROC),
-            (V1_CLASS, Some(v1_proc) as WNDPROC),
-            (NOTICE_CLASS, Some(notice_proc) as WNDPROC),
-        ] {
+        let classes: [(PCWSTR, WNDPROC); 3] = [
+            (MAIN_CLASS, Some(main_proc)),
+            (V1_CLASS, Some(v1_proc)),
+            (NOTICE_CLASS, Some(notice_proc)),
+        ];
+        for (class, proc_) in classes {
             RegisterClassExW(&WNDCLASSEXW {
                 cbSize: std::mem::size_of::<WNDCLASSEXW>() as u32,
                 lpfnWndProc: proc_,
@@ -209,7 +210,7 @@ unsafe fn layout_v1() {
     let width = s(440);
     let inner = width - 2 * pad;
     let mut y = s(20);
-    let mut place = |a: &AtomicIsize, x: i32, yy: i32, w: i32, hh: i32, font: WPARAM| {
+    let place = |a: &AtomicIsize, x: i32, yy: i32, w: i32, hh: i32, font: WPARAM| {
         let c = h(a);
         let _ = SetWindowPos(c, None, x, yy, w, hh, SWP_NOZORDER | SWP_NOACTIVATE);
         SendMessageW(c, WM_SETFONT, font, LPARAM(1));

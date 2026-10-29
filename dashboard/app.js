@@ -19,6 +19,7 @@ const ICONS = {
   back: '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
   x: '<path d="M18 6 6 18M6 6l12 12"/>',
   reset: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
+  download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/>',
   upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/>',
   play: '<path d="M6 3l14 9-14 9z"/>',
   pause: '<rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/>',
@@ -636,6 +637,16 @@ async function openPlayer(sid) {
 }
 
 // ---------------------------------------------------------------- auth/boot
+let setupMode = false;
+function showSetup() {
+  setupMode = true;
+  showLogin();
+  $("login-sub").textContent = "First start: create the administrator account. You'll use it to sign in from any teacher PC.";
+  $("login-confirm-row").hidden = false;
+  $("login-confirm").required = true;
+  $("login-pass").autocomplete = "new-password";
+  $("login-btn").textContent = "Create account";
+}
 function showLogin() {
   S.me = null;
   if (S.ws) { const w = S.ws; S.ws = null; w.close(); }
@@ -659,12 +670,35 @@ function wire() {
     const btn = $("login-btn");
     btn.disabled = true; $("login-error").textContent = "";
     try {
-      const j = await api("/api/login", { method: "POST", body: { username: $("login-user").value, password: $("login-pass").value } });
+      if (setupMode) {
+        if ($("login-pass").value !== $("login-confirm").value) throw new Error("The two passwords don't match.");
+        if ($("login-pass").value.length < 10) throw new Error("Use at least 10 characters for the password.");
+      }
+      const j = await api(setupMode ? "/api/setup" : "/api/login", { method: "POST", body: { username: $("login-user").value, password: $("login-pass").value } });
+      if (setupMode) {
+        setupMode = false;
+        $("login-confirm-row").hidden = true; $("login-confirm").required = false; $("login-confirm").value = "";
+        $("login-sub").textContent = "Teacher sign-in"; $("login-btn").textContent = "Sign in";
+      }
       S.me = j.user; $("login-pass").value = "";
       showApp();
     } catch (err) { $("login-error").textContent = err.message; }
     finally { btn.disabled = false; }
   });
+  $("add-pcs").onclick = async () => {
+    const b = $("add-pcs");
+    b.disabled = true;
+    try {
+      const r = await api("/api/student-installer", { raw: true });
+      const url = URL.createObjectURL(await r.blob());
+      const a = document.createElement("a");
+      a.href = url; a.download = "ExamWatch-Student.zip";
+      document.body.append(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      toast("info", "Downloaded ExamWatch-Student.zip. Extract both files to one folder, then run the MSI on each student PC (or assign it by Group Policy).");
+    } catch (err) { toast("alert", err.message); }
+    finally { b.disabled = false; }
+  };
   $("logout").onclick = async () => { try { await api("/api/logout", { method: "POST" }); } catch { /* already out */ } showLogin(); };
   $("lab-tabs").addEventListener("click", (e) => { const b = e.target.closest(".tab"); if (b) selectLab(b.dataset.lab); });
   $("layout-seg").addEventListener("click", (e) => {
@@ -761,6 +795,11 @@ async function boot() {
   if (!("VideoDecoder" in window)) {
     document.body.insertAdjacentHTML("afterbegin", '<div class="banner">This browser cannot decode video. Use a current version of Edge or Chrome.</div>');
   }
-  try { const j = await api("/api/me"); S.me = j.user; showApp(); } catch { showLogin(); }
+  try { const j = await api("/api/me"); S.me = j.user; showApp(); }
+  catch {
+    let setup = false;
+    try { setup = (await api("/api/setup")).needs_setup; } catch { /* server unreachable: plain login */ }
+    if (setup) showSetup(); else showLogin();
+  }
 }
 document.addEventListener("DOMContentLoaded", boot);

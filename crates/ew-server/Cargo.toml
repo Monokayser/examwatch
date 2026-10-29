@@ -30,6 +30,7 @@ parking_lot = "0.12"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [target.'cfg(windows)'.dependencies]
+windows-service = "0.7"
 windows = { version = "0.58", features = ["Win32_Foundation", "Win32_Security_Cryptography", "Win32_System_Memory"] }
 
 [dev-dependencies]

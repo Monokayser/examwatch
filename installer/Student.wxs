@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ExamWatch Student: installed on every student PC (double-click or GPO).
+  Needs examwatch-student.cfg in the same folder as the MSI (the teacher
+  dashboard's "Add student PCs" ZIP contains both).
+  Build: wix build Student.wxs -ext WixToolset.UI.wixext -arch x64 -d BinDir=... -d Version=...
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <Package Name="ExamWatch Student" Manufacturer="ExamWatch" Version="$(Version)"
+           UpgradeCode="9581533b-cdde-417d-8e8b-45f954bc25fb" Scope="perMachine" InstallerVersion="500" Compressed="yes">
+    <MajorUpgrade DowngradeErrorMessage="A newer version of ExamWatch Student is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+    <Icon Id="app.ico" SourceFile="$(IconFile)" />
+    <Property Id="ARPPRODUCTICON" Value="app.ico" />
+    <Property Id="ARPNOMODIFY" Value="1" />
+    <Property Id="ARPNOREPAIR" Value="1" />
+    <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
+    <ui:WixUI Id="WixUI_Minimal" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="ExamWatch">
+        <Component Id="Service">
+          <File Id="ServiceExe" Source="$(BinDir)\ew-service.exe" KeyPath="yes" />
+          <ServiceInstall Name="ExamWatchService" DisplayName="ExamWatch Student Service"
+                          Description="Keeps the ExamWatch exam-monitoring agent running during exams. Captures nothing outside an exam."
+                          Type="ownProcess" Start="auto" ErrorControl="normal" Account="LocalSystem" Vital="yes">
+            <ServiceConfigFailureActions OnInstall="yes" OnReinstall="yes" ResetPeriod="86400">
+              <Failure Action="restartService" Delay="1000" />
+              <Failure Action="restartService" Delay="2000" />
+              <Failure Action="restartService" Delay="5000" />
+            </ServiceConfigFailureActions>
+          </ServiceInstall>
+          <ServiceControl Id="ServiceControl" Name="ExamWatchService" Start="install" Stop="both" Remove="uninstall" Wait="yes" />
+        </Component>
+        <Component Id="Agent">
+          <File Id="AgentExe" Source="$(BinDir)\ew-agent.exe" KeyPath="yes" />
+        </Component>
+        <Component Id="Docs">
+          <File Id="LicenseTxt" Source="$(RepoDir)\LICENSE" Name="LICENSE.txt" KeyPath="yes" />
+          <File Id="NoticeTxt" Source="$(RepoDir)\NOTICE" Name="NOTICE.txt" />
+          <File Id="PrivacyMd" Source="$(RepoDir)\PRIVACY.md" Name="PRIVACY.md" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <!-- The V1 button: on every user's desktop and in Start. -->
+    <StandardDirectory Id="CommonDesktopFolder">
+      <Component Id="V1Desktop" Guid="b8f3a0e2-1d2c-4f7e-9a61-0c5e2d7b9f11">
+        <Shortcut Id="V1DesktopShortcut" Name="V1" Description="Start your exam (ExamWatch)"
+                  Target="[INSTALLFOLDER]ew-agent.exe" Arguments="--v1" WorkingDirectory="INSTALLFOLDER" Icon="app.ico" />
+        <RegistryValue Root="HKLM" Key="SOFTWARE\ExamWatch\Installer" Name="V1Desktop" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Component Id="V1Start" Guid="4c2d7e19-8b3a-4f60-a5d2-6e1f0b9c3a72">
+        <Shortcut Id="V1StartShortcut" Name="V1 - Start exam" Description="Start your exam (ExamWatch)"
+                  Target="[INSTALLFOLDER]ew-agent.exe" Arguments="--v1" WorkingDirectory="INSTALLFOLDER" Icon="app.ico" />
+        <RegistryValue Root="HKLM" Key="SOFTWARE\ExamWatch\Installer" Name="V1Start" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+
+    <!-- Settings (server, certificate pin, token) from examwatch-student.cfg next to the MSI.
+         Runs before the service starts so the agent connects immediately. -->
+    <CustomAction Id="ImportConfig" Directory="INSTALLFOLDER" Execute="deferred" Impersonate="no" Return="check"
+                  ExeCommand="&quot;[INSTALLFOLDER]ew-service.exe&quot; import-config &quot;[SourceDir]examwatch-student.cfg&quot;" />
+    <InstallExecuteSequence>
+      <ResolveSource After="CostInitialize" Condition="NOT Installed" />
+      <Custom Action="ImportConfig" After="InstallFiles" Condition="NOT Installed" />
+    </InstallExecuteSequence>
+
+    <Feature Id="Main" Title="ExamWatch Student" Level="1">
+      <ComponentRef Id="Service" />
+      <ComponentRef Id="Agent" />
+      <ComponentRef Id="Docs" />
+      <ComponentRef Id="V1Desktop" />
+      <ComponentRef Id="V1Start" />
+    </Feature>
+  </Package>
+</Wix>
