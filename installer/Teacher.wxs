@@ -7,7 +7,7 @@
   dashboard. The first launch asks for the administrator password.
   Build: wix build Teacher.wxs -ext WixToolset.UI.wixext -ext WixToolset.Firewall.wixext -arch x64 -d BinDir=... -d Version=... -d StudentMsi=...
 -->
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util"
      xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui"
      xmlns:fw="http://wixtoolset.org/schemas/v4/wxs/firewall">
   <Package Name="ExamWatch Teacher" Manufacturer="ExamWatch" Version="$(Version)"
@@ -44,11 +44,7 @@
                           Description="Receives student screens, records exams and serves the ExamWatch teacher dashboard."
                           Type="ownProcess" Start="auto" ErrorControl="normal" Account="LocalSystem" Vital="yes"
                           Arguments="--config &quot;[CommonAppDataFolder]ExamWatch\ew-server.toml&quot; service">
-            <ServiceConfigFailureActions OnInstall="yes" OnReinstall="yes" ResetPeriod="86400">
-              <Failure Action="restartService" Delay="2000" />
-              <Failure Action="restartService" Delay="5000" />
-              <Failure Action="restartService" Delay="10000" />
-            </ServiceConfigFailureActions>
+            <util:ServiceConfig FirstFailureActionType="restart" SecondFailureActionType="restart" ThirdFailureActionType="restart" RestartServiceDelayInSeconds="2" ResetPeriodInDays="1" />
           </ServiceInstall>
           <ServiceControl Id="ServerControl" Name="ExamWatchServer" Start="install" Stop="both" Remove="uninstall" Wait="yes" />
           <fw:FirewallException Id="FwAgents" Name="ExamWatch: student PCs (UDP 4433)" Protocol="udp" Port="4433" Scope="any" Profile="all" />

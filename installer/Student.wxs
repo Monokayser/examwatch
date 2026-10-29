@@ -5,7 +5,7 @@
   dashboard's "Add student PCs" ZIP contains both).
   Build: wix build Student.wxs -ext WixToolset.UI.wixext -arch x64 -d BinDir=... -d Version=...
 -->
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
   <Package Name="ExamWatch Student" Manufacturer="ExamWatch" Version="$(Version)"
            UpgradeCode="9581533b-cdde-417d-8e8b-45f954bc25fb" Scope="perMachine" InstallerVersion="500" Compressed="yes">
     <MajorUpgrade DowngradeErrorMessage="A newer version of ExamWatch Student is already installed." />
@@ -24,11 +24,7 @@
           <ServiceInstall Name="ExamWatchService" DisplayName="ExamWatch Student Service"
                           Description="Keeps the ExamWatch exam-monitoring agent running during exams. Captures nothing outside an exam."
                           Type="ownProcess" Start="auto" ErrorControl="normal" Account="LocalSystem" Vital="yes">
-            <ServiceConfigFailureActions OnInstall="yes" OnReinstall="yes" ResetPeriod="86400">
-              <Failure Action="restartService" Delay="1000" />
-              <Failure Action="restartService" Delay="2000" />
-              <Failure Action="restartService" Delay="5000" />
-            </ServiceConfigFailureActions>
+            <util:ServiceConfig FirstFailureActionType="restart" SecondFailureActionType="restart" ThirdFailureActionType="restart" RestartServiceDelayInSeconds="1" ResetPeriodInDays="1" />
           </ServiceInstall>
           <ServiceControl Id="ServiceControl" Name="ExamWatchService" Start="install" Stop="both" Remove="uninstall" Wait="yes" />
         </Component>
@@ -44,7 +40,7 @@
     </StandardDirectory>
 
     <!-- The V1 button: on every user's desktop and in Start. -->
-    <StandardDirectory Id="CommonDesktopFolder">
+    <StandardDirectory Id="DesktopFolder">
       <Component Id="V1Desktop" Guid="b8f3a0e2-1d2c-4f7e-9a61-0c5e2d7b9f11">
         <Shortcut Id="V1DesktopShortcut" Name="V1" Description="Start your exam (ExamWatch)"
                   Target="[INSTALLFOLDER]ew-agent.exe" Arguments="--v1" WorkingDirectory="INSTALLFOLDER" Icon="app.ico" />

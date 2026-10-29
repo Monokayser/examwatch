@@ -77,10 +77,10 @@ jobs:
             if ($LASTEXITCODE) { throw "wix build $src failed" }
           }
           New-Item -ItemType Directory -Force dist | Out-Null
-          Build installer/Student.wxs dist/ExamWatch-Student.msi @('WixToolset.UI.wixext') @()
+          Build installer/Student.wxs dist/ExamWatch-Student.msi @('WixToolset.UI.wixext', 'WixToolset.Util.wixext') @()
           Build installer/StudentSetup.wxs dist/ExamWatch-Student-Setup.exe @('WixToolset.Bal.wixext', 'WixToolset.Util.wixext') `
             @('-d', "StudentMsi=$((Resolve-Path dist/ExamWatch-Student.msi).Path)")
-          Build installer/Teacher.wxs dist/ExamWatch-Teacher.msi @('WixToolset.UI.wixext', 'WixToolset.Firewall.wixext') `
+          Build installer/Teacher.wxs dist/ExamWatch-Teacher.msi @('WixToolset.UI.wixext', 'WixToolset.Firewall.wixext', 'WixToolset.Util.wixext') `
             @('-d', "StudentMsi=$((Resolve-Path dist/ExamWatch-Student.msi).Path)", '-d', "StudentExe=$((Resolve-Path dist/ExamWatch-Student-Setup.exe).Path)")
           Build installer/TeacherSetup.wxs dist/ExamWatch-Teacher-Setup.exe @('WixToolset.Bal.wixext', 'WixToolset.Util.wixext') `
             @('-d', "TeacherMsi=$((Resolve-Path dist/ExamWatch-Teacher.msi).Path)")
