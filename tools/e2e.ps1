@@ -91,7 +91,7 @@ try {
 
     $rec = Invoke-RestMethod "$base/api/exams/$($exam.id)/recordings" -Headers $h -WebSession $s
     $expected = 2 * $PcsPerLab - 1
-    Check ($rec.students.Count -eq $expected) "recordings for $($rec.students.Count) students (expected $expected: one duplicate ID blocked)"
+    Check ($rec.students.Count -eq $expected) "recordings for $($rec.students.Count) students (expected ${expected}: one duplicate ID blocked)"
     $labs = $rec.students | Group-Object lab_id
     Check (($labs | Where-Object Name -eq 'anim1').Count -ge 1 -and ($labs | Where-Object Name -eq 'visarts').Count -ge 1) "students assigned to both labs"
     $span = ($rec.students | ForEach-Object { ($_.end_us - $_.start_us) / 1e6 } | Measure-Object -Minimum).Minimum
