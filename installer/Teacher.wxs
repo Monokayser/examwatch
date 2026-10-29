@@ -16,7 +16,6 @@
     <MediaTemplate EmbedCab="yes" />
     <Icon Id="app.ico" SourceFile="$(IconFile)" />
     <Property Id="ARPPRODUCTICON" Value="app.ico" />
-    <Property Id="ARPNOMODIFY" Value="1" />
     <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
 
     <!-- Microsoft Edge (present on every Windows 10/11 PC) opens the dashboard as an app window. -->

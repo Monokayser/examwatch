@@ -12,7 +12,6 @@
     <MediaTemplate EmbedCab="yes" />
     <Icon Id="app.ico" SourceFile="$(IconFile)" />
     <Property Id="ARPPRODUCTICON" Value="app.ico" />
-    <Property Id="ARPNOMODIFY" Value="1" />
     <Property Id="ARPNOREPAIR" Value="1" />
     <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
     <ui:WixUI Id="WixUI_Minimal" />
