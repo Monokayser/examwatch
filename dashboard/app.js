@@ -407,11 +407,12 @@ function onEvent(ev) {
       S.pcs.set(ev.pc.machine_id, ev.pc);
       const t = S.tiles.get(ev.pc.machine_id);
       if (t && old && old.lab_id === ev.pc.lab_id && old.status === ev.pc.status) { t.update(ev.pc); renderCounts(); }
-      else { renderGrid(); renderTabs(); }
+      else renderGrid();
+      renderTabs(); // live counts and offline alert dots
       if (S.zoomId === ev.pc.machine_id) renderZoomHead();
       break;
     }
-    case "exams": S.exams = ev.exams; renderExams(); renderGrid(); break;
+    case "exams": S.exams = ev.exams; renderAll(); break;
     case "toast": toast(ev.level, ev.text, ev.lab_id); break;
   }
 }
